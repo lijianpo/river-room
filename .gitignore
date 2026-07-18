@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.vite/
+.turbo/
+coverage/
+playwright-report/
+test-results/
+*.log
+.env
+data/*.db
+data/*.db-*
+apps/server/data/
+.DS_Store

@@ -1,0 +1,10 @@
+import { BellRing, Gauge, MonitorSmartphone, Volume2, Vibrate } from 'lucide-react';
+import { useGameSettings } from '../lib/settings';
+
+export function SettingsPage() {
+  const [settings, setSettings] = useGameSettings();
+  const toggle = (key: keyof typeof settings) => setSettings({ ...settings, [key]: !settings[key] });
+  return (
+    <div className="narrow-page"><header className="page-heading"><span className="eyebrow">PREFERENCES</span><h1>体验设置</h1><p>设置仅保存在当前浏览器中。</p></header><section className="settings-card"><div className="settings-row"><span className="setting-icon"><Volume2 /></span><div><strong>游戏音效</strong><p>发牌、下注、轮到自己与结算提示</p></div><button role="switch" aria-checked={settings.sound} className={`toggle ${settings.sound ? 'on' : ''}`} onClick={() => toggle('sound')}><span /></button></div><div className="settings-row"><span className="setting-icon"><Vibrate /></span><div><strong>手机震动</strong><p>轮到自己行动时给出轻触反馈</p></div><button role="switch" aria-checked={settings.vibration} className={`toggle ${settings.vibration ? 'on' : ''}`} onClick={() => toggle('vibration')}><span /></button></div><div className="settings-row"><span className="setting-icon"><Gauge /></span><div><strong>减少动画</strong><p>降低牌桌移动和强调动画</p></div><button role="switch" aria-checked={settings.reducedMotion} className={`toggle ${settings.reducedMotion ? 'on' : ''}`} onClick={() => toggle('reducedMotion')}><span /></button></div></section><section className="settings-info"><h2><MonitorSmartphone /> 设备适配</h2><p>牌桌会自动响应电脑、手机竖屏和横屏。手机竖屏使用底部操作区，横屏会展开更多牌局信息。</p><h2><BellRing /> 浏览器提醒</h2><p>保持页面打开即可收到行动声音与震动。部分浏览器需要首次点击页面后才允许播放声音。</p></section></div>
+  );
+}

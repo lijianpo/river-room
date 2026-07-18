@@ -1,0 +1,23 @@
+{
+  "name": "poker-sol",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.14.0",
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c cyan,green \"pnpm --filter @poker/server dev\" \"pnpm --filter @poker/web dev\"",
+    "build": "pnpm --filter @poker/web build && pnpm --filter @poker/server build",
+    "start": "pnpm --filter @poker/server start",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "test:watch": "pnpm --filter @poker/game-engine test:watch",
+    "e2e": "playwright test",
+    "db:migrate": "pnpm --filter @poker/server db:migrate",
+    "db:seed": "pnpm --filter @poker/server db:seed",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
+  }
+}
