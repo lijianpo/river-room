@@ -1,0 +1,105 @@
+/* 登录页与房间邀请页 */
+
+.landing-page { min-height: 100dvh; max-width: 1240px; margin: auto; padding: 48px 64px; display: grid; grid-template-columns: minmax(0,1.2fr) minmax(360px,.65fr); align-items: center; gap: 80px; overflow: hidden; }
+.landing-copy { position: relative; }
+.landing-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 74px; }
+.landing-brand > span { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid rgba(217,173,91,.45); border-radius: 50%; color: var(--gold); font-size: 1.5rem; }
+.landing-brand div { display: flex; flex-direction: column; }
+.landing-brand strong { letter-spacing: .17em; font-family: Georgia, serif; }
+.landing-brand small { color: var(--muted); font-size: .7rem; letter-spacing: .5em; }
+.landing-copy h1 { margin: 14px 0 24px; font-family: Georgia, "Songti SC", serif; font-size: clamp(3.1rem, 6vw, 5.6rem); line-height: .98; letter-spacing: -.045em; font-weight: 500; }
+.landing-copy h1 em { color: var(--gold); font-style: italic; }
+.landing-lead { max-width: 640px; color: #a9b9b1; font-size: 1.04rem; line-height: 1.9; }
+.feature-pills { max-width: 600px; margin-top: 34px; display: flex; flex-wrap: wrap; gap: 10px; }
+.feature-pills span { display: inline-flex; align-items: center; gap: 8px; padding: 9px 13px; border: 1px solid var(--line); border-radius: 999px; color: #c1cec8; background: rgba(255,255,255,.025); font-size: .78rem; }
+.feature-pills svg { width: 15px; color: var(--gold); }
+.decorative-cards { position: absolute; right: -32px; bottom: -150px; z-index: -1; opacity: .14; transform: rotate(12deg); }
+.decorative-cards span { width: 180px; height: 250px; margin-left: -105px; display: inline-grid; place-items: center; border: 5px solid #fff; border-radius: 20px; font: 700 3rem Georgia; background: #eef0e6; color: #111; box-shadow: var(--shadow); }
+.decorative-cards span + span { color: #a21f31; transform: rotate(15deg); }
+.auth-card { width: 100%; padding: 30px; border: 1px solid var(--line); border-radius: 24px; background: linear-gradient(145deg, rgba(19,35,29,.95), rgba(7,16,13,.98)); box-shadow: var(--shadow); backdrop-filter: blur(20px); }
+.auth-tabs { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; margin-bottom: 28px; padding: 4px; border-radius: 11px; background: rgba(0,0,0,.25); }
+.auth-tabs.two { grid-template-columns: repeat(2,1fr); }
+.auth-tabs button { min-height: 39px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: .82rem; font-weight: 700; }
+.auth-tabs button.active { color: var(--text); background: var(--surface-3); box-shadow: 0 2px 12px rgba(0,0,0,.2); }
+.auth-card form { display: grid; gap: 17px; }
+.auth-card label, .dialog label { display: grid; gap: 8px; color: #bcc9c3; font-size: .78rem; font-weight: 700; }
+.auth-card input, .dialog input, .dialog select, .waiting-controls select { width: 100%; min-height: 46px; border: 1px solid var(--line); border-radius: 10px; padding: 0 13px; color: var(--text); background: rgba(0,0,0,.25); }
+.auth-card input::placeholder { color: #596a62; }
+.password-input { position: relative; display: block; }
+.password-input input { padding-right: 48px; }
+.password-input button { position: absolute; right: 4px; top: 3px; width: 40px; height: 40px; border: 0; background: transparent; color: var(--muted); }
+.auth-submit { width: 100%; margin-top: 3px; }
+.auth-notes { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); display: grid; gap: 9px; color: #778a81; font-size: .7rem; }
+.auth-notes span { display: flex; gap: 7px; align-items: center; }
+.auth-notes svg { color: var(--green); }
+.invite-page { min-height: 100dvh; padding: 34px clamp(18px,5vw,64px) 56px; display: flex; flex-direction: column; background: radial-gradient(circle at 20% 12%,rgba(24,105,76,.3),transparent 35%),radial-gradient(circle at 86% 82%,rgba(217,173,91,.12),transparent 32%); }
+.invite-brand { width: fit-content; display: flex; align-items: center; gap: 10px; }
+.invite-brand > span { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid rgba(217,173,91,.45); border-radius: 50%; color: var(--gold); font-size: 1.25rem; }
+.invite-brand div { display: flex; flex-direction: column; }
+.invite-brand strong { font: 700 .78rem Georgia,serif; letter-spacing: .16em; }
+.invite-brand small { color: var(--muted); font-size: var(--fs-min); letter-spacing: .36em; }
+.invite-layout { width: min(980px,100%); margin: auto; display: grid; grid-template-columns: minmax(0,1fr) minmax(360px,.82fr); gap: 22px; align-items: stretch; }
+.invite-preview-card, .invite-entry-card, .invite-state-card { border: 1px solid var(--line); border-radius: 24px; background: linear-gradient(145deg,rgba(18,34,28,.97),rgba(6,14,11,.98)); box-shadow: var(--shadow); }
+.invite-preview-card { position: relative; min-height: 540px; padding: 48px; overflow: hidden; }
+.invite-preview-card::after { content: "♠"; position: absolute; right: -20px; bottom: -80px; color: rgba(217,173,91,.045); font: 420px/1 Georgia,serif; pointer-events: none; }
+.invite-mode-icon { position: relative; z-index: 1; width: 66px; height: 66px; margin-bottom: 64px; display: grid; place-items: center; border: 1px solid rgba(27,168,117,.3); border-radius: 18px; background: rgba(27,168,117,.1); color: #69d9ad; }
+.invite-mode-icon.ranked { border-color: rgba(217,173,91,.35); background: rgba(217,173,91,.1); color: var(--gold); }
+.invite-mode-icon svg { width: 28px; height: 28px; }
+.invite-preview-card h1 { position: relative; z-index: 1; margin: 9px 0 17px; font: 500 clamp(2.25rem,4vw,3.5rem)/1.06 Georgia,"Songti SC",serif; }
+.invite-description { position: relative; z-index: 1; max-width: 520px; color: #a7b8b0; font-size: .86rem; line-height: 1.75; }
+.invite-stats { position: relative; z-index: 1; margin: 34px 0 24px; padding: 17px 0; display: grid; grid-template-columns: repeat(2,1fr); gap: 18px; border-block: 1px solid var(--line); }
+.invite-stats div { display: grid; gap: 6px; }
+.invite-stats dt { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: var(--fs-min); }
+.invite-stats dt svg { width: 13px; }
+.invite-stats dd { margin: 0; color: var(--gold-light); font-weight: 800; font-size: .9rem; }
+.invite-room-kind { position: relative; z-index: 1; display: inline-flex; padding: 7px 10px; border: 1px solid rgba(217,173,91,.2); border-radius: 99px; color: var(--gold); background: rgba(217,173,91,.06); font-size: var(--fs-min); }
+.invite-entry-card { min-height: 540px; padding: 30px; display: flex; flex-direction: column; justify-content: center; }
+.invite-entry-card > header { margin-bottom: 22px; }
+.invite-entry-card > header h2 { margin: 7px 0 8px; font: 500 1.8rem Georgia,"Songti SC",serif; }
+.invite-entry-card > header p { margin: 0; color: var(--muted); font-size: .76rem; line-height: 1.65; }
+.invite-entry-card > .auth-card { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
+.invite-inline-state, .invite-state-card { display: grid; place-items: center; text-align: center; }
+.invite-inline-state { min-height: 360px; align-content: center; }
+.invite-inline-state > svg, .invite-state-card > svg { width: 46px; height: 46px; margin-bottom: 15px; color: var(--gold); }
+.invite-inline-state h2, .invite-state-card h2 { margin: 0 0 9px; font: 500 1.7rem Georgia,"Songti SC",serif; }
+.invite-inline-state p, .invite-state-card p { max-width: 400px; margin-bottom: 22px; color: var(--muted); font-size: .78rem; line-height: 1.7; }
+.invite-inline-state.joining .chip-loader, .invite-state-card .chip-loader { margin-bottom: 19px; }
+.invite-state-card { width: min(500px,100%); min-height: 360px; margin: auto; padding: 36px; align-content: center; }
+.invite-state-actions { display: flex; justify-content: center; gap: 9px; }
+.guest-preview { width: min(600px,100%); margin-top: 28px; overflow: hidden; border: 1px solid var(--line); border-radius: 15px; background: rgba(5,14,11,.62); backdrop-filter: blur(14px); }
+.guest-preview > header { min-height: 42px; padding: 0 13px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); color: var(--muted); font-size: var(--fs-min); }
+.guest-preview > header span { display: flex; align-items: center; gap: 6px; }
+.guest-preview > header svg { width: 15px; color: var(--gold); }
+.guest-preview > header strong { color: #62d6a8; }
+.guest-preview ol { max-height: 210px; margin: 0; padding: 5px 10px; overflow: auto; list-style: none; }
+.guest-preview li { min-height: 35px; display: grid; grid-template-columns: 24px 27px 1fr auto; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,.05); font-size: var(--fs-min); }
+.guest-preview li:last-child { border-bottom: 0; }
+.guest-preview li > span { color: var(--gold); text-align: center; }
+.guest-preview li img { width: 24px; height: 24px; border-radius: 50%; }
+.guest-preview li b { color: var(--gold-light); }
+.guest-preview .preview-empty { display: flex; min-height: 62px; color: var(--muted); justify-content: center; }
+
+@media (max-width: 1050px) {
+  .landing-page { padding-inline: 38px; gap: 40px; }
+}
+
+@media (max-width: 700px) {
+  .landing-page { min-height: 100dvh; padding: 28px 18px 40px; display: block; }
+  .landing-brand { margin-bottom: 44px; }
+  .landing-copy h1 { font-size: clamp(2.4rem,12vw,3.4rem); white-space: normal; }
+  .landing-lead { font-size: .88rem; line-height: 1.7; }
+  .feature-pills { margin: 24px 0 30px; }
+  .auth-card { padding: 22px; }
+  .invite-page { padding: 22px 14px 34px; }
+  .invite-brand { margin-bottom: 28px; }
+  .invite-layout { margin: 0 auto; grid-template-columns: 1fr; }
+  .invite-preview-card { min-height: 0; padding: 28px 24px; }
+  .invite-mode-icon { width: 52px; height: 52px; margin-bottom: 34px; }
+  .invite-preview-card h1 { font-size: 2.25rem; }
+  .invite-entry-card { min-height: 0; padding: 24px 20px; }
+  .invite-inline-state { min-height: 300px; }
+  .invite-state-card { min-height: 330px; padding: 28px 22px; }
+  .decorative-cards { display: none; }
+  .landing-page { overflow: visible; }
+  .guest-preview { margin: 0 0 28px; }
+}

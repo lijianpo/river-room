@@ -12,6 +12,11 @@ describe('PlayingCard', () => {
     expect(html).toContain('card-suit');
   });
 
+  it('带上花色类名，供四色牌面着色', () => {
+    expect(renderToStaticMarkup(<PlayingCard card={{ rank: 'T', suit: 'd' }} />)).toContain('suit-d');
+    expect(renderToStaticMarkup(<PlayingCard card={{ rank: '9', suit: 'c' }} />)).toContain('suit-c');
+  });
+
   it('隐藏未公开的底牌', () => {
     const html = renderToStaticMarkup(<PlayingCard card={{ rank: '', suit: '', hidden: true }} />);
     expect(html).toContain('暗牌');

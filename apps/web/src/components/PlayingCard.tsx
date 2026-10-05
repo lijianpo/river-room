@@ -13,7 +13,7 @@ export function PlayingCard({ card, small = false }: { card: CardView; small?: b
   const rank = card.rank === 'T' ? '10' : card.rank;
   const red = card.suit === 'h' || card.suit === 'd';
   return (
-    <span className={`playing-card ${red ? 'red' : ''} ${small ? 'small' : ''}`} aria-label={`${suit.name}${rank}`}>
+    <span className={`playing-card suit-${card.suit} ${red ? 'red' : ''} ${small ? 'small' : ''}`} aria-label={`${suit.name}${rank}`}>
       <strong className="card-rank">{rank}</strong>
       <span className="card-suit">{suit.symbol}</span>
     </span>

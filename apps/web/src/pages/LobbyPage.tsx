@@ -10,6 +10,14 @@ import { api, post } from '../lib/api';
 import { copyText } from '../lib/clipboard';
 import { socket } from '../lib/socket';
 
+function greeting(date = new Date()): string {
+  const hour = date.getHours();
+  if (hour < 5) return 'LATE NIGHT';
+  if (hour < 12) return 'GOOD MORNING';
+  if (hour < 18) return 'GOOD AFTERNOON';
+  return 'GOOD EVENING';
+}
+
 function statusLabel(status: PublicRoomSummary['status']): string {
   return { waiting: '等待中', countdown: '即将开局', playing: '进行中', finished: '已结束' }[status];
 }
@@ -123,7 +131,7 @@ export function LobbyPage() {
   return (
     <div className="lobby-page">
       <section className="lobby-hero">
-        <div><span className="eyebrow">GOOD EVENING</span><h1>{user?.displayName}，选张桌子吧。</h1><p>和真人切磋，或创建自己的 AI 牌局。</p></div>
+        <div><span className="eyebrow">{greeting()}</span><h1>{user?.displayName}，选张桌子吧。</h1><p>和真人切磋，或创建自己的 AI 牌局。</p></div>
         <div className="lobby-actions">
           <form className="code-join" onSubmit={joinPrivate}><LockKeyhole /><input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} maxLength={36} placeholder="输入房间码" /><button>加入</button></form>
           <button className="primary-button" onClick={() => setCreateOpen(true)}><Plus /> 创建牌局</button>

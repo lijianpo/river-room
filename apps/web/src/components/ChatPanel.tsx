@@ -1,6 +1,7 @@
 import type { ChatMessage } from '@poker/contracts';
 import { Flag, Send, UserX, X } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { readSettings } from '../lib/settings';
 
 export function ChatPanel({
   messages,
@@ -23,7 +24,10 @@ export function ChatPanel({
   const [muted, setMuted] = useState<Set<string>>(() => new Set());
   const end = useRef<HTMLDivElement>(null);
   const visible = messages.filter((message) => message.system || !muted.has(message.senderId));
-  useEffect(() => end.current?.scrollIntoView({ behavior: 'smooth' }), [visible.length, open]);
+  useEffect(() => {
+    // 用块语句体，不能把 scrollIntoView 的返回值交给 React：新版浏览器会返回 Promise，被当成清理函数调用而崩溃。
+    end.current?.scrollIntoView({ behavior: readSettings().reducedMotion ? 'auto' : 'smooth' });
+  }, [visible.length, open]);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!text.trim()) return;

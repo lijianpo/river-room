@@ -1,0 +1,71 @@
+/* 基础：设计变量、全局元素、通用按钮与加载状态 */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #f7f3e8;
+  background: #050b09;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --bg: #050b09;
+  --surface: #0b1512;
+  --surface-2: #111f1a;
+  --surface-3: #172821;
+  --line: rgba(245, 235, 210, 0.11);
+  --line-strong: rgba(245, 235, 210, 0.2);
+  --muted: #91a29a;
+  --text: #f7f3e8;
+  --gold: #d9ad5b;
+  --gold-light: #f1d394;
+  --green: #1ba875;
+  --green-dark: #096044;
+  --red: #e26a6a;
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+  /* 最小可读字号：辅助信息、徽章与牌桌标签都不低于 11px */
+  --fs-min: .6875rem;
+}
+* { box-sizing: border-box; }
+html { min-width: 320px; background: var(--bg); }
+body { margin: 0; min-width: 320px; min-height: 100vh; min-height: 100dvh; background: radial-gradient(circle at 50% -20%, #15372b 0, var(--bg) 38%); }
+button, input, select { font: inherit; }
+button { color: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+a { color: inherit; text-decoration: none; }
+h1, h2, h3, p { margin-top: 0; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+.eyebrow { color: var(--gold); font-size: .7rem; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
+.primary-button, .secondary-button, .small-primary, .danger-button {
+  min-height: 44px; border: 1px solid transparent; border-radius: 12px; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; font-weight: 800; transition: transform .16s ease, background .16s ease, border-color .16s ease;
+}
+.primary-button { background: linear-gradient(135deg, #e2bb6e, #bd8739); color: #171006; box-shadow: 0 8px 28px rgba(217, 173, 91, .2); }
+.primary-button:hover:not(:disabled), .small-primary:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+.danger-button { background: linear-gradient(145deg,#b24552,#7a2833); border-color: #c4606b; color: #fff1f1; }
+.danger-button:hover:not(:disabled) { filter: brightness(1.1); }
+.secondary-button { background: rgba(255,255,255,.04); border-color: var(--line-strong); color: var(--text); }
+.secondary-button:hover:not(:disabled) { background: rgba(255,255,255,.08); border-color: rgba(217,173,91,.4); }
+.small-primary { min-height: 36px; padding: 0 14px; border-radius: 9px; color: #171006; background: var(--gold); font-size: .82rem; }
+.icon-button { width: 40px; height: 40px; display: inline-grid; place-items: center; border: 0; border-radius: 10px; background: transparent; color: var(--muted); }
+.icon-button:hover { color: var(--text); background: rgba(255,255,255,.07); }
+.form-error { padding: 10px 12px; border: 1px solid rgba(226,106,106,.35); border-radius: 9px; background: rgba(226,106,106,.08); color: #ffb1b1; font-size: .82rem; }
+.positive { color: #58d6a3 !important; }
+.negative { color: #ef8a8a !important; }
+.live-dot { width: 8px; height: 8px; display: inline-block; border-radius: 50%; background: #35d595; box-shadow: 0 0 0 5px rgba(53,213,149,.1); animation: pulse-dot 1.6s infinite; }
+@keyframes pulse-dot { 50% { box-shadow: 0 0 0 8px rgba(53,213,149,0); } }
+.full-loader, .room-loading { min-height: 100dvh; display: grid; place-content: center; justify-items: center; color: var(--muted); text-align: center; }
+.error-boundary-message { max-width: min(520px, calc(100vw - 32px)); margin: 4px 0 18px; color: #ffb1b1; font-size: .8rem; overflow-wrap: anywhere; }
+.chip-loader { width: 58px; height: 58px; display: grid; place-items: center; margin-bottom: 12px; border: 7px dashed var(--gold); border-radius: 50%; color: var(--gold); font-size: 1.3rem; animation: chip-spin 2s linear infinite; }
+@keyframes chip-spin { to { transform: rotate(360deg); } }
+.user-avatar { width: 32px; height: 32px; display: block; flex: 0 0 auto; border-radius: 50%; object-fit: cover; background: var(--surface-3); }
+
+/* 系统偏好或“设置 → 减少动画”任一开启时，都关闭动画与过渡。 */
+:root[data-reduced-motion="true"] *, :root[data-reduced-motion="true"] *::before, :root[data-reduced-motion="true"] *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

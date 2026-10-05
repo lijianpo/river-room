@@ -1,15 +1,15 @@
 import { Copy, QrCode, Share2, X } from 'lucide-react';
-import { useEffect } from 'react';
 import QRCode from 'react-qr-code';
 import { copyText } from '../lib/clipboard';
 import { buildInviteUrl, isLoopbackInviteOrigin, resolvePublicAppOrigin } from '../lib/invite';
+import { useDialog } from '../lib/use-dialog';
 
 interface RoomShareDialogProps {
   open: boolean;
   roomName: string;
   inviteCode: string;
   onClose: () => void;
-  onNotice: (message: string) => void;
+  onNotice: (message: string, kind?: 'success' | 'error') => void;
   publicOrigin?: string;
 }
 
@@ -18,21 +18,14 @@ export function RoomShareDialog({ open, roomName, inviteCode, onClose, onNotice,
   const origin = resolvePublicAppOrigin(publicOrigin ?? import.meta.env.VITE_PUBLIC_APP_URL, currentOrigin);
   const inviteUrl = buildInviteUrl(inviteCode, origin);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+  const dialogRef = useDialog<HTMLElement>(open, onClose);
 
   if (!open) return null;
 
   const copyInvite = async () => {
     try {
       await copyText(inviteUrl);
-      onNotice('邀请链接已复制');
+      onNotice('邀请链接已复制', 'success');
     } catch (reason) {
       onNotice(reason instanceof Error ? reason.message : '复制失败');
     }
@@ -57,7 +50,7 @@ export function RoomShareDialog({ open, roomName, inviteCode, onClose, onNotice,
 
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="dialog share-room-dialog" role="dialog" aria-modal="true" aria-labelledby="share-room-title">
+      <section ref={dialogRef} tabIndex={-1} className="dialog share-room-dialog" role="dialog" aria-modal="true" aria-labelledby="share-room-title">
         <header>
           <div><span className="eyebrow">ROOM INVITE</span><h2 id="share-room-title">分享牌桌</h2></div>
           <button className="icon-button" aria-label="关闭分享面板" onClick={onClose}><X size={20} /></button>
@@ -76,7 +69,7 @@ export function RoomShareDialog({ open, roomName, inviteCode, onClose, onNotice,
         <label className="share-link-field">邀请链接<input aria-label="邀请链接" value={inviteUrl} readOnly onFocus={(event) => event.currentTarget.select()} /></label>
         {isLoopbackInviteOrigin(origin) && <p className="share-origin-warning">当前链接指向本机，其他设备无法访问。请通过公网域名或局域网 IP 打开本站后重新分享，或配置 VITE_PUBLIC_APP_URL。</p>}
         <div className="dialog-actions share-actions">
-          <button className="secondary-button" onClick={() => void copyInvite()}><Copy />复制链接</button>
+          <button className="secondary-button" data-autofocus onClick={() => void copyInvite()}><Copy />复制链接</button>
           <button className="primary-button" onClick={() => void shareInvite()}><Share2 />系统分享</button>
         </div>
       </section>

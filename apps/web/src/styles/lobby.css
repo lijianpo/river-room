@@ -1,0 +1,96 @@
+/* 大厅：房间列表、筹码账户与每日奖励 */
+
+.lobby-hero { margin-bottom: 34px; display: flex; justify-content: space-between; align-items: flex-end; gap: 30px; }
+.lobby-hero h1 { margin: 7px 0 8px; font: 500 clamp(2rem,4vw,3.4rem) Georgia, "Songti SC", serif; }
+.lobby-hero p { margin: 0; color: var(--muted); }
+.lobby-actions { display: flex; gap: 10px; }
+.code-join { height: 44px; padding-left: 12px; display: flex; align-items: center; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--muted); }
+.code-join svg { width: 16px; }
+.code-join input { width: 125px; border: 0; padding: 0 9px; color: var(--text); background: transparent; text-transform: uppercase; letter-spacing: .08em; outline: none; }
+.code-join button { align-self: stretch; border: 0; border-left: 1px solid var(--line); padding: 0 14px; background: transparent; color: var(--gold); font-weight: 800; }
+.active-room-card { min-height: 68px; margin-bottom: 28px; padding: 12px 16px; display: flex; align-items: center; gap: 13px; border: 1px solid rgba(27,168,117,.25); border-radius: 14px; background: linear-gradient(90deg, rgba(27,168,117,.12), rgba(27,168,117,.03)); }
+.active-room-card div { display: flex; flex-direction: column; }
+.active-room-card small { color: var(--muted); }
+.active-room-card > button { margin-left: auto; border: 0; border-radius: 8px; padding: 8px 14px; background: #1d8c66; font-weight: 700; }
+.active-room-card .copy-button { margin-left: 0; width: 35px; padding: 8px; background: transparent; }
+.alert { margin-bottom: 20px; padding: 12px 15px; display: flex; align-items: center; justify-content: space-between; border-radius: 10px; }
+.alert.error { border: 1px solid rgba(226,106,106,.25); background: rgba(226,106,106,.08); color: #f1a2a2; }
+.alert button { border: 0; background: transparent; font-size: 1.3rem; }
+.room-browser { border-top: 1px solid var(--line); padding-top: 28px; }
+.browser-header { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.browser-header h2 { margin: 0 0 4px; font: 500 1.45rem Georgia; }
+.browser-header > div > span { color: var(--muted); font-size: .72rem; }
+.browser-tools { display: flex; gap: 10px; align-items: center; }
+.search-input { height: 38px; padding: 0 11px; display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); background: var(--surface); }
+.search-input input { width: 120px; border: 0; outline: 0; color: var(--text); background: transparent; font-size: .78rem; }
+.filter-tabs, .ranking-tabs { padding: 3px; display: flex; border-radius: 10px; background: rgba(255,255,255,.04); }
+.filter-tabs button, .ranking-tabs button { min-height: 32px; border: 0; border-radius: 7px; padding: 0 13px; background: transparent; color: var(--muted); font-size: .73rem; font-weight: 700; }
+.filter-tabs button.active, .ranking-tabs button.active { color: var(--text); background: var(--surface-3); }
+.room-grid, .skeleton-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 15px; }
+.room-card { min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 15px; background: linear-gradient(145deg,var(--surface-2),#09120f); transition: transform .18s ease, border-color .18s ease; }
+.room-card:hover { transform: translateY(-2px); border-color: rgba(217,173,91,.26); }
+.room-card header { display: grid; grid-template-columns: 42px 1fr auto; align-items: center; gap: 11px; }
+.mode-icon { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid rgba(27,168,117,.22); border-radius: 11px; background: rgba(27,168,117,.08); color: #43bf8e; font: 800 var(--fs-min) Georgia; }
+.mode-icon svg { width: 19px; }
+.mode-icon.ranked { border-color: rgba(217,173,91,.25); background: rgba(217,173,91,.08); color: var(--gold); }
+.room-card h3 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .95rem; }
+.room-card header p { margin: 4px 0 0; color: var(--muted); font-size: var(--fs-min); }
+.room-status { padding: 5px 7px; border-radius: 99px; background: rgba(255,255,255,.05); color: var(--muted); font-size: var(--fs-min); font-weight: 800; }
+.room-status.waiting, .room-status.countdown { color: #70d5ad; background: rgba(27,168,117,.1); }
+.room-status.playing { color: #e7bd72; background: rgba(217,173,91,.09); }
+.room-stats { margin: 17px 0; padding: 12px 0; display: flex; flex-wrap: wrap; gap: 12px; border-block: 1px solid var(--line); color: #a8b8b0; font-size: .69rem; }
+.room-stats span { display: inline-flex; align-items: center; gap: 4px; }
+.room-stats svg { width: 13px; }
+.room-stats .ranked-label { color: var(--gold); }
+.room-card footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.room-card footer > span { color: var(--muted); font-size: var(--fs-min); }
+.room-skeleton { height: 186px; border-radius: 15px; background: linear-gradient(100deg,var(--surface) 30%,var(--surface-2) 50%,var(--surface) 70%); background-size: 300% 100%; animation: skeleton 1.4s infinite; }
+@keyframes skeleton { to { background-position: -150% 0; } }
+.empty-state { min-height: 280px; padding: 50px 20px; display: grid; place-content: center; justify-items: center; text-align: center; border: 1px dashed var(--line-strong); border-radius: 16px; color: var(--muted); }
+.empty-state > span { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--gold); }
+.empty-state h3 { margin: 14px 0 7px; color: var(--text); }
+.empty-state p { font-size: .78rem; }
+.empty-state.compact { min-height: 210px; border: 0; }
+.wallet-chip { min-height: 34px; margin-inline: 8px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(217,173,91,.22); border-radius: 999px; background: rgba(217,173,91,.06); color: var(--gold-light); white-space: nowrap; }
+.wallet-chip svg { width: 15px; }
+.wallet-chip span { color: var(--muted); font-size: var(--fs-min); }
+.wallet-chip strong { font-size: .7rem; }
+.wallet-summary { min-width: 300px; margin: 0; padding: 7px; display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; border: 1px solid var(--line); border-radius: 12px; background: rgba(0,0,0,.16); }
+.wallet-summary div { min-width: 0; padding: 7px 10px; display: grid; gap: 3px; border-radius: 8px; }
+.wallet-summary dt { color: var(--muted); font-size: var(--fs-min); }
+.wallet-summary dd { margin: 0; overflow: hidden; color: #dbe7e1; font-size: .83rem; font-weight: 800; text-overflow: ellipsis; }
+.wallet-summary .wallet-total { background: rgba(217,173,91,.09); }
+.wallet-summary .wallet-total dd { color: var(--gold-light); }
+.lobby-wallet-card { margin: -12px 0 28px; padding: 12px; display: flex; align-items: stretch; justify-content: space-between; gap: 12px; border: 1px solid rgba(217,173,91,.16); border-radius: 15px; background: linear-gradient(90deg,rgba(217,173,91,.07),rgba(12,27,21,.68)); }
+.daily-bonus { min-width: 230px; padding: 8px 14px; display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.025); color: var(--muted); text-align: left; }
+.daily-bonus.ready { border-color: rgba(217,173,91,.36); color: var(--gold-light); background: rgba(217,173,91,.08); }
+.daily-bonus > svg { width: 25px; }
+.daily-bonus span { display: grid; gap: 3px; }
+.daily-bonus strong { font-size: .72rem; }
+.daily-bonus small { color: var(--muted); font-size: var(--fs-min); }
+
+@media (max-width: 1050px) {
+  .room-grid { grid-template-columns: repeat(2,1fr); }
+}
+
+@media (max-width: 900px) {
+  .lobby-hero { align-items: flex-start; flex-direction: column; }
+  .lobby-actions { width: 100%; }
+  .code-join { flex: 1; }
+  .code-join input { flex: 1; width: 0; }
+  .browser-header { align-items: flex-start; flex-direction: column; }
+  .browser-tools { width: 100%; }
+  .search-input { flex: 1; }
+  .search-input input { width: 100%; }
+}
+
+@media (max-width: 700px) {
+  .lobby-hero h1 { font-size: 2.25rem; }
+  .room-grid, .skeleton-grid { grid-template-columns: 1fr; }
+  .browser-tools { align-items: stretch; flex-direction: column; }
+  .filter-tabs { width: 100%; }
+  .filter-tabs button { flex: 1; }
+  .lobby-wallet-card { align-items: stretch; flex-direction: column; }
+  .lobby-wallet-card .wallet-summary, .wallet-summary { width: 100%; min-width: 0; }
+  .daily-bonus { width: 100%; min-width: 0; }
+}

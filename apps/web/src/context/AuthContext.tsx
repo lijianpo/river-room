@@ -10,6 +10,8 @@ interface AuthContextValue {
   loading: boolean;
   latencyMs: number | null;
   latencyTimedOut: boolean;
+  /** 实时连接（Socket.IO）当前是否在线 */
+  socketConnected: boolean;
   refresh: () => Promise<void>;
   enterAsGuest: (displayName: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
@@ -27,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [latencyTimedOut, setLatencyTimedOut] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(socket.connected);
 
   const refresh = useCallback(async () => {
     try {
@@ -48,6 +51,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const updateWallet = (next: WalletView) => setWallet(next);
     socket.on('wallet:updated', updateWallet);
     return () => { socket.off('wallet:updated', updateWallet); };
+  }, []);
+  useEffect(() => {
+    const onConnect = () => setSocketConnected(true);
+    const onDisconnect = () => setSocketConnected(false);
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    setSocketConnected(socket.connected);
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+    };
   }, []);
   useEffect(() => {
     if (user && !user.mustChangePassword) {
@@ -134,8 +148,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ user, currentRoom, wallet, loading, latencyMs, latencyTimedOut, refresh, enterAsGuest, login, register, logout, claimDailyBonus }),
-    [user, currentRoom, wallet, loading, latencyMs, latencyTimedOut, refresh],
+    () => ({ user, currentRoom, wallet, loading, latencyMs, latencyTimedOut, socketConnected, refresh, enterAsGuest, login, register, logout, claimDailyBonus }),
+    [user, currentRoom, wallet, loading, latencyMs, latencyTimedOut, socketConnected, refresh],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

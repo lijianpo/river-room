@@ -18,7 +18,7 @@ export function AccountPage() {
   const returnTo = searchParams.get('returnTo');
   const meta = useQuery({ queryKey: ['meta'], queryFn: () => api<{ presetAvatars: PresetAvatar[] }>('/api/meta'), enabled: !user?.isGuest });
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
-  const [presetAvatar, setPresetAvatar] = useState<string | undefined>(() => user?.avatarUrl.includes('/preset/') ? user.avatarUrl.split('/').at(-1) : undefined);
+  const [presetAvatar, setPresetAvatar] = useState<string | undefined>(() => user?.avatarUrl.includes('/preset/') ? user.avatarUrl.split('/').pop() : undefined);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');

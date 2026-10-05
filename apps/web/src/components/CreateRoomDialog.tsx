@@ -1,6 +1,7 @@
 import type { AiDifficulty, GameMode, RoomVisibility } from '@poker/contracts';
 import { Bot, LockKeyhole, Trophy, X } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
+import { useDialog } from '../lib/use-dialog';
 
 export interface CreateRoomValues {
   name: string;
@@ -48,6 +49,7 @@ export function CreateRoomDialog({
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useDialog<HTMLElement>(open, busy ? undefined : onClose);
   if (!open) return null;
   const update = <K extends keyof CreateRoomValues>(key: K, value: CreateRoomValues[K]) => setValues((current) => ({ ...current, [key]: value }));
   const submit = async (event: FormEvent) => {
@@ -67,10 +69,10 @@ export function CreateRoomDialog({
   };
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="dialog create-room-dialog" role="dialog" aria-modal="true" aria-labelledby="create-title">
-        <header><div><span className="eyebrow">NEW TABLE</span><h2 id="create-title">创建牌局</h2></div><button className="icon-button" onClick={onClose}><X size={20} /></button></header>
+      <section ref={dialogRef} tabIndex={-1} className="dialog create-room-dialog" role="dialog" aria-modal="true" aria-labelledby="create-title">
+        <header><div><span className="eyebrow">NEW TABLE</span><h2 id="create-title">创建牌局</h2></div><button className="icon-button" aria-label="关闭创建牌局" onClick={onClose}><X size={20} /></button></header>
         <form onSubmit={(event) => void submit(event)}>
-          <label>房间名称<input value={values.name} onChange={(event) => update('name', event.target.value)} minLength={2} maxLength={24} required /></label>
+          <label>房间名称<input data-autofocus value={values.name} onChange={(event) => update('name', event.target.value)} minLength={2} maxLength={24} required /></label>
           <div className="segmented">
             <button type="button" className={values.mode === 'cash' ? 'active' : ''} onClick={() => update('mode', 'cash')}>常规桌</button>
             <button type="button" className={values.mode === 'tournament' ? 'active' : ''} onClick={() => update('mode', 'tournament')}>单桌锦标赛</button>

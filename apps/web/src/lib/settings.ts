@@ -4,12 +4,14 @@ export interface GameSettings {
   sound: boolean;
   vibration: boolean;
   reducedMotion: boolean;
+  fourColorDeck: boolean;
 }
 
 const defaults: GameSettings = {
   sound: true,
   vibration: true,
   reducedMotion: false,
+  fourColorDeck: false,
 };
 
 export function readSettings(): GameSettings {
@@ -20,10 +22,22 @@ export function readSettings(): GameSettings {
   }
 }
 
+/** 把影响全局样式的设置同步到 <html> 的 data 属性上，由 CSS 统一响应。 */
+export function applyDisplaySettings(settings: GameSettings = readSettings()): void {
+  const root = document.documentElement;
+  root.dataset.reducedMotion = String(settings.reducedMotion);
+  root.dataset.fourColor = String(settings.fourColorDeck);
+}
+
 export function useGameSettings(): [GameSettings, (next: GameSettings) => void] {
   const [settings, setSettings] = useState(readSettings);
   const update = (next: GameSettings) => {
-    localStorage.setItem('poker-settings', JSON.stringify(next));
+    try {
+      localStorage.setItem('poker-settings', JSON.stringify(next));
+    } catch {
+      // 隐私模式等场景无法持久化时，仍在当前页面生效。
+    }
+    applyDisplaySettings(next);
     window.dispatchEvent(new CustomEvent('poker-settings', { detail: next }));
     setSettings(next);
   };

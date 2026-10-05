@@ -3,8 +3,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, CheckCircle2, Clipboard, Coins, FileWarning, LogOut, RotateCcw, Search, Settings2, Shield, Users, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Avatar } from '../components/Avatar';
+import { useConfirm } from '../components/ConfirmDialog';
 import { api, patch, post } from '../lib/api';
 import { copyText } from '../lib/clipboard';
+import { useDialog } from '../lib/use-dialog';
 
 type AdminTab = 'users' | 'reports' | 'settings';
 interface PageResult<T> { items: T[]; page: number; pageSize: number; total: number; totalPages: number }
@@ -24,6 +26,10 @@ export function AdminPage() {
   const [chipDirection, setChipDirection] = useState<'add' | 'deduct'>('add');
   const [chipAmount, setChipAmount] = useState(2_000);
   const [chipReason, setChipReason] = useState('运营调整');
+  const [confirmElement, confirm, prompt] = useConfirm();
+  // 临时密码必须由管理员点击“我已保存”关闭，因此不响应 Esc。
+  const passwordDialogRef = useDialog<HTMLElement>(temporaryPassword !== null);
+  const chipDialogRef = useDialog<HTMLElement>(chipTarget !== null, () => setChipTarget(null));
 
   const users = useQuery({
     queryKey: ['admin-users', page, search, status],
@@ -51,21 +57,21 @@ export function AdminPage() {
       setNotice(error instanceof Error ? error.message : '操作失败');
     }
   };
-  const changeStatus = (user: AdminUserView) => {
+  const changeStatus = async (user: AdminUserView) => {
     if (user.status === 'active') {
-      const reason = window.prompt(`请输入封禁 ${user.displayName} 的原因`, '违反牌室规则');
+      const reason = await prompt({ title: '封禁账号', message: `封禁后 ${user.displayName} 将无法登录。`, confirmLabel: '确认封禁', danger: true, input: { label: '封禁原因', defaultValue: '违反牌室规则' } });
       if (reason === null) return;
       void runUserAction(() => patch(`/api/admin/users/${user.id}/status`, { status: 'disabled', reason }), '账号已封禁');
     } else {
       void runUserAction(() => patch(`/api/admin/users/${user.id}/status`, { status: 'active' }), '账号已解封');
     }
   };
-  const forceLogout = (user: AdminUserView) => {
-    if (!window.confirm(`确认强制 ${user.displayName} 下线吗？`)) return;
+  const forceLogout = async (user: AdminUserView) => {
+    if (!await confirm({ title: '强制下线', message: `确认强制 ${user.displayName} 下线吗？`, confirmLabel: '强制下线', danger: true })) return;
     void runUserAction(() => post(`/api/admin/users/${user.id}/force-logout`), '用户已下线');
   };
   const resetPassword = async (user: AdminUserView) => {
-    if (!window.confirm(`确认重置 ${user.displayName} 的密码吗？所有会话将失效。`)) return;
+    if (!await confirm({ title: '重置密码', message: `确认重置 ${user.displayName} 的密码吗？所有会话将失效。`, confirmLabel: '重置密码', danger: true })) return;
     try {
       const result = await post<{ temporaryPassword: string }>(`/api/admin/users/${user.id}/reset-password`);
       setTemporaryPassword(result.temporaryPassword);
@@ -132,8 +138,8 @@ export function AdminPage() {
             <div className="admin-user-dates"><span>注册 {new Date(user.createdAt).toLocaleDateString()}</span><span>最后在线 {user.lastSeenAt ? new Date(user.lastSeenAt).toLocaleString() : '—'}</span></div>
             <div className="admin-row-actions">
               <button onClick={() => { setChipTarget(user); setChipDirection('add'); setChipAmount(2_000); setChipReason('运营调整'); }}><Coins />筹码</button>
-              <button onClick={() => changeStatus(user)}>{user.status === 'active' ? <Ban /> : <CheckCircle2 />}{user.status === 'active' ? '封禁' : '解封'}</button>
-              <button onClick={() => forceLogout(user)}><LogOut />下线</button>
+              <button onClick={() => void changeStatus(user)}>{user.status === 'active' ? <Ban /> : <CheckCircle2 />}{user.status === 'active' ? '封禁' : '解封'}</button>
+              <button onClick={() => void forceLogout(user)}><LogOut />下线</button>
               <button onClick={() => void resetPassword(user)}><RotateCcw />重置密码</button>
             </div>
           </article>)}
@@ -150,8 +156,9 @@ export function AdminPage() {
 
       {tab === 'settings' && <SettingsForm value={settings.data?.showdownDurationSeconds ?? 8} onSaved={() => void client.invalidateQueries({ queryKey: ['admin-settings'] })} />}
 
-      {temporaryPassword && <div className="dialog-backdrop"><section className="temporary-password-dialog" role="dialog" aria-modal="true"><h2>临时密码</h2><p>密码只显示这一次，请通过安全渠道交给用户。</p><code>{temporaryPassword}</code><button className="secondary-button" aria-live="polite" onClick={() => void copyTemporaryPassword()}>{passwordCopyStatus === 'copied' ? <CheckCircle2 /> : <Clipboard />}{passwordCopyStatus === 'copied' ? '已复制' : passwordCopyStatus === 'error' ? '重试复制' : '复制'}</button>{passwordCopyStatus === 'error' && <p className="temporary-password-copy-error" role="alert">自动复制失败，请长按上方临时密码手动复制。</p>}<button className="primary-button" onClick={closeTemporaryPassword}>我已保存，关闭</button></section></div>}
-      {chipTarget && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setChipTarget(null)}><section className="dialog chip-adjust-dialog" role="dialog" aria-modal="true"><header><div><span className="eyebrow">CHIP CONTROL</span><h2>调整用户筹码</h2></div><button className="icon-button" onClick={() => setChipTarget(null)}><X /></button></header><div className="chip-target-summary"><Avatar src={chipTarget.avatarUrl} name={chipTarget.displayName} /><span><strong>{chipTarget.displayName}</strong><small>当前可用 {chipTarget.availableChips.toLocaleString()}</small></span></div><form onSubmit={(event) => void adjustChips(event)}><div className="segmented"><button type="button" className={chipDirection === 'add' ? 'active' : ''} onClick={() => setChipDirection('add')}>增加</button><button type="button" className={chipDirection === 'deduct' ? 'active' : ''} onClick={() => setChipDirection('deduct')}>扣减</button></div><label>筹码数量<input type="number" min={1} max={1_000_000} value={chipAmount} onChange={(event) => setChipAmount(Number(event.target.value))} required /></label><label>调整原因<input value={chipReason} minLength={2} maxLength={200} onChange={(event) => setChipReason(event.target.value)} required /></label><p className="chip-adjust-preview">调整后可用筹码：<strong>{Math.max(0, chipTarget.availableChips + (chipDirection === 'add' ? chipAmount : -chipAmount)).toLocaleString()}</strong></p><div className="dialog-actions"><button type="button" className="secondary-button" onClick={() => setChipTarget(null)}>取消</button><button className="primary-button" disabled={chipDirection === 'deduct' && chipAmount > chipTarget.availableChips}>确认调整</button></div></form></section></div>}
+      {temporaryPassword && <div className="dialog-backdrop"><section ref={passwordDialogRef} tabIndex={-1} className="temporary-password-dialog" role="dialog" aria-modal="true" aria-label="临时密码"><h2>临时密码</h2><p>密码只显示这一次，请通过安全渠道交给用户。</p><code>{temporaryPassword}</code><button className="secondary-button" aria-live="polite" onClick={() => void copyTemporaryPassword()}>{passwordCopyStatus === 'copied' ? <CheckCircle2 /> : <Clipboard />}{passwordCopyStatus === 'copied' ? '已复制' : passwordCopyStatus === 'error' ? '重试复制' : '复制'}</button>{passwordCopyStatus === 'error' && <p className="temporary-password-copy-error" role="alert">自动复制失败，请长按上方临时密码手动复制。</p>}<button className="primary-button" onClick={closeTemporaryPassword}>我已保存，关闭</button></section></div>}
+      {chipTarget && <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setChipTarget(null)}><section ref={chipDialogRef} tabIndex={-1} className="dialog chip-adjust-dialog" role="dialog" aria-modal="true" aria-label="调整用户筹码"><header><div><span className="eyebrow">CHIP CONTROL</span><h2>调整用户筹码</h2></div><button className="icon-button" aria-label="关闭筹码调整" onClick={() => setChipTarget(null)}><X /></button></header><div className="chip-target-summary"><Avatar src={chipTarget.avatarUrl} name={chipTarget.displayName} /><span><strong>{chipTarget.displayName}</strong><small>当前可用 {chipTarget.availableChips.toLocaleString()}</small></span></div><form onSubmit={(event) => void adjustChips(event)}><div className="segmented"><button type="button" className={chipDirection === 'add' ? 'active' : ''} onClick={() => setChipDirection('add')}>增加</button><button type="button" className={chipDirection === 'deduct' ? 'active' : ''} onClick={() => setChipDirection('deduct')}>扣减</button></div><label>筹码数量<input type="number" min={1} max={1_000_000} value={chipAmount} onChange={(event) => setChipAmount(Number(event.target.value))} required /></label><label>调整原因<input value={chipReason} minLength={2} maxLength={200} onChange={(event) => setChipReason(event.target.value)} required /></label><p className="chip-adjust-preview">调整后可用筹码：<strong>{Math.max(0, chipTarget.availableChips + (chipDirection === 'add' ? chipAmount : -chipAmount)).toLocaleString()}</strong></p><div className="dialog-actions"><button type="button" className="secondary-button" onClick={() => setChipTarget(null)}>取消</button><button className="primary-button" disabled={chipDirection === 'deduct' && chipAmount > chipTarget.availableChips}>确认调整</button></div></form></section></div>}
+      {confirmElement}
     </div>
   );
 }

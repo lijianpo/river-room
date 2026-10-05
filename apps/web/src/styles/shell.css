@@ -1,0 +1,66 @@
+/* 应用外壳：顶栏、导航与页面标题 */
+
+.app-shell { min-height: 100dvh; }
+.topbar { position: sticky; z-index: 40; top: 0; height: 68px; padding: 0 max(28px, calc((100vw - 1300px)/2)); display: flex; align-items: center; border-bottom: 1px solid var(--line); background: rgba(5,11,9,.85); backdrop-filter: blur(20px); }
+.brand { min-width: 218px; display: flex; align-items: center; gap: 10px; }
+.brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid rgba(217,173,91,.45); border-radius: 50%; color: var(--gold); }
+.brand > span:last-child { display: flex; flex-direction: column; }
+.brand strong { font: 700 .78rem Georgia; letter-spacing: .16em; }
+.brand small { color: var(--muted); font-size: var(--fs-min); letter-spacing: .36em; }
+.desktop-nav { display: flex; height: 100%; gap: 4px; }
+.nav-link { position: relative; height: 100%; padding: 0 15px; display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: .78rem; font-weight: 700; }
+.nav-link:hover, .nav-link.active { color: var(--text); }
+.nav-link.active::after { content: ""; position: absolute; left: 16px; right: 16px; bottom: -1px; height: 2px; background: var(--gold); }
+.account-chip { margin-left: auto; min-height: 38px; padding-left: 12px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--gold); }
+.account-chip a { color: var(--text); font-size: .76rem; font-weight: 700; }
+.account-chip .icon-button { width: 34px; height: 34px; border-left: 1px solid var(--line); border-radius: 0 999px 999px 0; }
+.return-room { min-height: 34px; display: flex; justify-content: center; align-items: center; gap: 10px; background: rgba(27,168,117,.11); border-bottom: 1px solid rgba(27,168,117,.15); color: #87d9b9; font-size: .72rem; }
+.page-content { width: min(1240px, calc(100% - 48px)); margin: auto; padding: 48px 0 90px; }
+.mobile-nav { display: none; }
+.page-heading { margin-bottom: 30px; }
+.page-heading h1 { margin: 7px 0 8px; font: 500 clamp(2rem,4vw,3.2rem) Georgia, "Songti SC", serif; }
+.page-heading p { color: var(--muted); }
+.page-heading.split { display: flex; justify-content: space-between; align-items: center; }
+.heading-icon { width: 78px; height: 78px; padding: 18px; border: 1px solid rgba(217,173,91,.25); border-radius: 50%; color: var(--gold); background: rgba(217,173,91,.05); }
+.narrow-page { width: min(760px,100%); margin: auto; }
+.account-chip .user-avatar { width: 28px; height: 28px; }
+.latency-badge { min-height: 32px; padding: 0 9px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: rgba(255,255,255,.025); font-size: var(--fs-min); white-space: nowrap; }
+.latency-badge.good { color: #57d7a4; border-color: rgba(87,215,164,.2); }
+.latency-badge.fair { color: #eccb7d; border-color: rgba(236,203,125,.22); }
+.latency-badge.poor { color: #ef8f8f; border-color: rgba(239,143,143,.24); }
+
+@media (max-width: 1100px) {
+  .topbar > .wallet-chip span { display: none; }
+  .topbar > .wallet-chip { margin-inline: 4px; }
+}
+
+@media (max-width: 1050px) {
+  .desktop-nav .nav-link { padding-inline: 9px; }
+  .brand { min-width: 185px; }
+}
+
+@media (max-width: 900px) {
+  .topbar { padding-inline: 18px; }
+  .desktop-nav { display: none; }
+  .mobile-nav { position: fixed; z-index: 50; left: 0; right: 0; bottom: 0; height: calc(61px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); display: grid; grid-template-columns: repeat(4,1fr); border-top: 1px solid var(--line); background: rgba(5,11,9,.95); backdrop-filter: blur(16px); }
+  .mobile-nav a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--muted); font-size: var(--fs-min); }
+  .mobile-nav a.active { color: var(--gold); }
+  .page-content { width: min(100% - 30px,760px); padding-top: 30px; padding-bottom: 90px; }
+}
+
+@media (max-width: 700px) {
+  .brand { min-width: 0; }
+  .brand > span:last-child { display: none; }
+  .account-chip { padding-left: 9px; }
+  .page-heading h1 { font-size: 2.25rem; }
+  .topbar > .latency-badge { margin-left: auto; }
+  .account-chip { margin-left: 7px; }
+  .mobile-nav { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; }
+  .topbar > .wallet-chip { margin-left: auto; padding-inline: 8px; }
+  .topbar > .latency-badge { margin-left: 0; }
+  .topbar > .wallet-chip span { display: none; }
+}
+
+@media (max-width: 430px) {
+  .topbar > .wallet-chip { display: none; }
+}
