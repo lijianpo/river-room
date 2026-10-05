@@ -10,6 +10,8 @@ export function ChatPanel({
   onClose,
   onSend,
   onReport,
+  muted,
+  onMute,
   readOnly = false,
 }: {
   messages: ChatMessage[];
@@ -18,10 +20,12 @@ export function ChatPanel({
   onClose: () => void;
   onSend: (text: string) => void;
   onReport: (messageId: string) => void;
+  /** 本地屏蔽的玩家；牌桌上同样隐藏他们的表情 */
+  muted: ReadonlySet<string>;
+  onMute: (senderId: string) => void;
   readOnly?: boolean;
 }) {
   const [text, setText] = useState('');
-  const [muted, setMuted] = useState<Set<string>>(() => new Set());
   const end = useRef<HTMLDivElement>(null);
   const visible = messages.filter((message) => message.system || !muted.has(message.senderId));
   useEffect(() => {
@@ -34,7 +38,6 @@ export function ChatPanel({
     onSend(text.trim());
     setText('');
   };
-  const mute = (senderId: string) => setMuted((current) => new Set([...current, senderId]));
   return (
     <aside className={`chat-panel ${open ? 'open' : ''}`} aria-label="牌桌聊天">
       <header>
@@ -49,7 +52,7 @@ export function ChatPanel({
             <p>{message.text}</p>
             {!message.system && message.senderId !== selfId && (
               <span className="message-tools">
-                <button onClick={() => mute(message.senderId)} title="屏蔽该玩家"><UserX size={12} /> 屏蔽</button>
+                <button onClick={() => onMute(message.senderId)} title="屏蔽该玩家"><UserX size={12} /> 屏蔽</button>
                 <button onClick={() => onReport(message.id)} title="举报消息"><Flag size={12} /> 举报</button>
               </span>
             )}

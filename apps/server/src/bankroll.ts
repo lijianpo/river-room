@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { WalletView } from '@poker/contracts';
-import { and, eq } from 'drizzle-orm';
+import type { ChipTransactionPage, ChipTransactionType, WalletView } from '@poker/contracts';
+import { and, desc, eq, lt, or } from 'drizzle-orm';
 import { config } from './config.js';
 import type { PokerDatabase } from './db/index.js';
 import { chipTransactions, tableStakes, users } from './db/schema.js';
@@ -202,6 +202,37 @@ export class BankrollService {
       }).run();
     });
     return this.wallet(userId);
+  }
+
+  /** 按时间倒序分页读取筹码流水；游标为上一页最后一条的 `createdAt:id`。 */
+  listTransactions(userId: string, options: { limit?: number; cursor?: string | undefined } = {}): ChipTransactionPage {
+    const limit = Math.min(100, Math.max(1, options.limit ?? 30));
+    const [cursorTime, ...cursorIdParts] = (options.cursor ?? '').split(':');
+    const cursorId = cursorIdParts.join(':');
+    const after = options.cursor && Number.isFinite(Number(cursorTime)) && cursorId
+      ? or(
+          lt(chipTransactions.createdAt, Number(cursorTime)),
+          and(eq(chipTransactions.createdAt, Number(cursorTime)), lt(chipTransactions.id, cursorId)),
+        )
+      : undefined;
+    const rows = this.db.select().from(chipTransactions)
+      .where(after ? and(eq(chipTransactions.userId, userId), after) : eq(chipTransactions.userId, userId))
+      .orderBy(desc(chipTransactions.createdAt), desc(chipTransactions.id))
+      .limit(limit + 1)
+      .all();
+    const page = rows.slice(0, limit);
+    const last = page[page.length - 1];
+    return {
+      transactions: page.map((row) => ({
+        id: row.id,
+        type: row.type as ChipTransactionType,
+        amount: row.amount,
+        balanceAfter: row.balanceAfter,
+        note: row.note,
+        createdAt: row.createdAt,
+      })),
+      nextCursor: rows.length > limit && last ? `${last.createdAt}:${last.id}` : null,
+    };
   }
 
   activeStakeForUser(userId: string): ActiveStake | null {

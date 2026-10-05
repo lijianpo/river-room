@@ -1,5 +1,5 @@
 import { parse } from 'cookie';
-import { aiDifficultySchema, playerActionSchema } from '@poker/contracts';
+import { aiDifficultySchema, emoteIdSchema, playerActionSchema } from '@poker/contracts';
 import type { AuthService } from './auth.js';
 import { SESSION_COOKIE } from './auth.js';
 import type { PokerIo } from './room-manager.js';
@@ -46,6 +46,12 @@ export function registerSocketHandlers(io: PokerIo, auth: AuthService, rooms: Ro
     socket.on('room:stand-up', (payload, callback) => {
       withAck(callback, () => rooms.standUp(socket.data.auth, payload.roomId));
     });
+    socket.on('room:sit-out', (payload, callback) => {
+      withAck(callback, () => rooms.sitOut(socket.data.auth, payload.roomId));
+    });
+    socket.on('room:sit-in', (payload, callback) => {
+      withAck(callback, () => rooms.sitIn(socket.data.auth, payload.roomId));
+    });
     socket.on('room:start', (payload, callback) => {
       withAck(callback, () => rooms.start(socket.data.auth, payload.roomId));
     });
@@ -69,6 +75,9 @@ export function registerSocketHandlers(io: PokerIo, auth: AuthService, rooms: Ro
     });
     socket.on('chat:send', (payload, callback) => {
       withAck(callback, () => rooms.sendChat(socket.data.auth, payload.roomId, payload.text));
+    });
+    socket.on('room:emote', (payload, callback) => {
+      withAck(callback, () => rooms.sendEmote(socket.data.auth, payload.roomId, emoteIdSchema.parse(payload.emote)));
     });
     socket.on('chat:report', (payload, callback) => {
       withAck(callback, () => rooms.reportChat(socket.data.auth, payload.roomId, payload.messageId));

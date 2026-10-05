@@ -4,13 +4,16 @@ import type {
   HandHistoryDetail,
   HandHistorySummary,
   LeaderboardEntry,
+  PlayerStatsView,
   RoomConfig,
+  StatsMode,
 } from '@poker/contracts';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { cardCode, type Card, type EngineAction } from '@poker/game-engine';
 import { config } from './config.js';
 import { avatarUrl } from './avatar.js';
 import type { PokerDatabase } from './db/index.js';
+import { computePlayerStats, type StatsAction } from './stats.js';
 import {
   gameSessions,
   handActions,
@@ -264,6 +267,14 @@ export class PersistenceService {
     const hand = this.db.select().from(hands).where(eq(hands.id, handId)).get();
     if (!hand) return null;
     const participants = this.db.select().from(handParticipants).where(eq(handParticipants.handId, handId)).all();
+    const session = this.db.select({ configJson: gameSessions.configJson }).from(gameSessions).where(eq(gameSessions.id, hand.gameSessionId)).get();
+    let maxSeats = Math.max(2, ...participants.map((participant) => participant.seat + 1));
+    try {
+      const seats = session ? (JSON.parse(session.configJson) as Partial<RoomConfig>).maxSeats : undefined;
+      if (typeof seats === 'number' && seats >= maxSeats) maxSeats = seats;
+    } catch {
+      // 旧数据的配置无法解析时，按实际座位号推算。
+    }
     const actions = this.db
       .select()
       .from(handActions)
@@ -282,6 +293,8 @@ export class PersistenceService {
       completedAt: hand.completedAt,
       resultText: hand.resultText,
       board: (JSON.parse(hand.boardJson) as string[]).map(this.cardView),
+      smallBlind: hand.smallBlind,
+      maxSeats,
       players: participants.map((participant) => ({
         id: participant.identityId,
         name: participant.name,
@@ -291,10 +304,12 @@ export class PersistenceService {
             ? (JSON.parse(participant.holeCardsJson) as string[]).map(this.cardView)
             : [{ rank: '', suit: '', hidden: true }, { rank: '', suit: '', hidden: true }],
         shown: participant.shown || participant.identityId === identityId,
+        startingStack: participant.startingStack,
         netChips: participant.netChips,
       })),
       actions: actions.map((action) => ({
         sequence: action.sequence,
+        playerId: action.playerId,
         playerName: action.playerName,
         street: action.street,
         action: action.action,
@@ -302,6 +317,57 @@ export class PersistenceService {
         createdAt: action.createdAt,
       })),
     };
+  }
+
+  /** 统计某个身份最近 limit 手牌的技术数据。 */
+  playerStats(identityId: string, mode: StatsMode = 'all', limit = 1_000): PlayerStatsView {
+    const condition = mode === 'all'
+      ? eq(handParticipants.identityId, identityId)
+      : and(eq(handParticipants.identityId, identityId), eq(hands.mode, mode));
+    const rows = this.db
+      .select({
+        handId: hands.id,
+        mode: hands.mode,
+        bigBlind: hands.bigBlind,
+        completedAt: hands.completedAt,
+        pot: hands.pot,
+        boardJson: hands.boardJson,
+        netChips: handParticipants.netChips,
+        shown: handParticipants.shown,
+      })
+      .from(handParticipants)
+      .innerJoin(hands, eq(handParticipants.handId, hands.id))
+      .where(condition)
+      .orderBy(desc(hands.completedAt))
+      .limit(limit)
+      .all();
+    const actionsByHand = new Map<string, StatsAction[]>();
+    // 分批读取，避免 IN 列表过长。
+    for (let start = 0; start < rows.length; start += 500) {
+      const ids = rows.slice(start, start + 500).map((row) => row.handId);
+      const actions = this.db
+        .select({ handId: handActions.handId, playerId: handActions.playerId, street: handActions.street, action: handActions.action, amount: handActions.amount })
+        .from(handActions)
+        .where(inArray(handActions.handId, ids))
+        .orderBy(asc(handActions.handId), asc(handActions.sequence))
+        .all();
+      for (const { handId, ...action } of actions) {
+        const list = actionsByHand.get(handId) ?? [];
+        list.push(action);
+        actionsByHand.set(handId, list);
+      }
+    }
+    return computePlayerStats(identityId, rows.map((row) => ({
+      handId: row.handId,
+      mode: row.mode as GameMode,
+      bigBlind: row.bigBlind,
+      completedAt: row.completedAt,
+      pot: row.pot,
+      boardCount: (JSON.parse(row.boardJson) as string[]).length,
+      netChips: row.netChips,
+      shown: row.shown,
+      actions: actionsByHand.get(row.handId) ?? [],
+    })));
   }
 
   saveReport(input: {

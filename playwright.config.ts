@@ -27,6 +27,7 @@ export default defineConfig({
       DATABASE_PATH: './data/e2e.db',
       AVATAR_DIR: './data/e2e-avatars',
       TURN_TIMEOUT_MS: '5000',
+      TIME_BANK_MS: '0',
       AI_FILL_DELAY_MS: '3000',
     },
   },

@@ -11,6 +11,13 @@ function positiveInteger(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
+/** 允许 0 的整数配置，例如 TIME_BANK_MS=0 表示关闭时间银行。 */
+function nonNegativeInteger(value: string | undefined, fallback: number): number {
+  if (value === undefined || value.trim() === '') return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback;
+}
+
 const databaseValue = process.env.DATABASE_PATH;
 const avatarDirectoryValue = process.env.AVATAR_DIR;
 
@@ -33,6 +40,7 @@ export const config = {
   maxSpectatorsPerRoom: positiveInteger(process.env.MAX_SPECTATORS_PER_ROOM, 50),
   sessionDays: positiveInteger(process.env.SESSION_DAYS, 30),
   turnTimeoutMs: positiveInteger(process.env.TURN_TIMEOUT_MS, 20_000),
+  timeBankMs: nonNegativeInteger(process.env.TIME_BANK_MS, 30_000),
   aiFillDelayMs: positiveInteger(process.env.AI_FILL_DELAY_MS, 30_000),
   reconnectGraceMs: positiveInteger(process.env.RECONNECT_GRACE_MS, 90_000),
   webDistPath: path.join(repositoryRoot, 'apps', 'web', 'dist'),

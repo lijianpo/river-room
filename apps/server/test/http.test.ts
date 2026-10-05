@@ -43,6 +43,18 @@ describe('HTTP 大厅流程', () => {
     expect(foreignOrigin.statusCode).toBe(500);
   });
 
+  it('游客没有筹码流水，注册用户可读取初始筹码记录', async () => {
+    temporaryDirectory = mkdtempSync(join(tmpdir(), 'poker-sol-test-'));
+    server = await buildServer({ databasePath: join(temporaryDirectory, 'test.db'), logger: false });
+    const guest = await server.app.inject({ method: 'POST', url: '/api/auth/guest', payload: { displayName: '流水游客' } });
+    const guestList = await server.app.inject({ method: 'GET', url: '/api/account/transactions', headers: { cookie: String(guest.headers['set-cookie']).split(';')[0]! } });
+    expect(guestList.statusCode).toBe(403);
+    const registered = await server.app.inject({ method: 'POST', url: '/api/auth/register', payload: { email: 'ledger@example.com', displayName: '流水玩家', password: 'ledger-test-password' } });
+    const list = await server.app.inject({ method: 'GET', url: '/api/account/transactions?limit=10', headers: { cookie: String(registered.headers['set-cookie']).split(';')[0]! } });
+    expect(list.statusCode).toBe(200);
+    expect(list.json()).toMatchObject({ transactions: [{ type: 'initial', amount: 10_000 }], nextCursor: null });
+  });
+
   it('两个游客可以创建并加入休闲房', async () => {
     temporaryDirectory = mkdtempSync(join(tmpdir(), 'poker-sol-test-'));
     server = await buildServer({ databasePath: join(temporaryDirectory, 'test.db'), logger: false });

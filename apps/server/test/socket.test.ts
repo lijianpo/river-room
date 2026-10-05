@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Ack, ClientToServerEvents, GameSnapshot, ServerToClientEvents } from '@poker/contracts';
+import type { Ack, ClientToServerEvents, GameSnapshot, HandHistoryDetail, ServerToClientEvents } from '@poker/contracts';
 import { io, type Socket } from 'socket.io-client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildServer, type BuiltServer } from '../src/index.js';
@@ -149,8 +149,20 @@ describe('WebSocket 联机牌局', () => {
     expect(result.showdown?.winners[0]).toMatchObject({ revealed: false, handName: null, holeCards: [] });
     expect((result.showdown?.displayUntil ?? 0) - (result.showdown?.completedAt ?? 0)).toBe(8_000);
 
-    const history = await request<{ hands: unknown[] }>(baseUrl, cookieOne, '/api/history');
+    const history = await request<{ hands: Array<{ id: string }> }>(baseUrl, cookieOne, '/api/history');
     expect(history.hands).toHaveLength(1);
+    const detail = await request<{ hand: HandHistoryDetail }>(baseUrl, cookieOne, `/api/history/${history.hands[0]!.id}`);
+    expect(detail.hand).toMatchObject({ maxSeats: 6, smallBlind: 10, bigBlind: 20 });
+    expect(detail.hand.players.every((player) => player.startingStack === 2_000)).toBe(true);
+    const playerIds = new Set(detail.hand.players.map((player) => player.id));
+    expect(detail.hand.actions.filter((action) => action.action !== 'deal').every((action) => playerIds.has(action.playerId))).toBe(true);
+
+    const stats = await request<{ stats: { hands: number; vpip: number | null; netCurve: number[] } }>(baseUrl, cookieOne, '/api/stats/me');
+    expect(stats.stats.hands).toBe(1);
+    expect(stats.stats.netCurve).toHaveLength(2);
+    expect((await request<{ stats: { hands: number } }>(baseUrl, cookieOne, '/api/stats/me?mode=tournament')).stats.hands).toBe(0);
+    const missing = await fetch(`${baseUrl}/api/stats/users/${crypto.randomUUID()}`, { headers: { cookie: cookieOne } });
+    expect(missing.status).toBe(404);
   }, 15_000);
 
   it('锦标赛观众可订阅和选座，但不能发送聊天', async () => {
@@ -280,11 +292,151 @@ describe('WebSocket 联机牌局', () => {
     expect((await emitAck(host, 'room:start', { roomId: created.room.id } as never)).ok).toBe(true);
     const result = await completed;
     expect(result.resultMessage).toMatch(/赢得/);
+    const hostMe = await request<{ user: { userId: string } }>(baseUrl, hostCookie, '/api/auth/me');
+    const profile = await request<{ profile: { displayName: string; stats: { hands: number } } }>(baseUrl, playerCookie, `/api/stats/users/${hostMe.user.userId}`);
+    expect(profile.profile).toMatchObject({ displayName: '排位房主', stats: { hands: 1 } });
     const stand = await new Promise<Ack>((resolve) => player.emit('room:stand-up', { roomId: created.room.id }, resolve));
     expect(stand).toEqual({ ok: true });
     expect((await request<{ wallet: { availableChips: number; tableChips: number; totalChips: number } }>(baseUrl, playerCookie, '/api/auth/me')).wallet).toMatchObject({ availableChips: 10_010, tableChips: 0, totalChips: 10_010 });
     const leave = await new Promise<Ack>((resolve) => host.emit('room:leave', { roomId: created.room.id }, resolve));
     expect(leave).toEqual({ ok: true });
     expect((await request<{ wallet: { availableChips: number; tableChips: number } }>(baseUrl, hostCookie, '/api/auth/me')).wallet).toMatchObject({ availableChips: 9_990, tableChips: 0 });
+  });
+});
+
+async function startTestServer(name: string, timing?: { turnTimeoutMs?: number; timeBankMs?: number }): Promise<string> {
+  directory = mkdtempSync(join(tmpdir(), `poker-sol-${name}-`));
+  server = await buildServer({ databasePath: join(directory, `${name}.db`), avatarDirectory: join(directory, 'avatars'), logger: false, ...(timing ? { timing } : {}) });
+  await server.app.listen({ host: '127.0.0.1', port: 0 });
+  const address = server.app.server.address();
+  if (!address || typeof address === 'string') throw new Error('无法获取测试端口');
+  return `http://127.0.0.1:${address.port}`;
+}
+
+const casualRoom = (overrides: Record<string, unknown> = {}) => ({
+  name: '牌桌工具测试', mode: 'cash', visibility: 'public', ranked: false,
+  maxSeats: 6, targetPlayers: 2, smallBlind: 10, bigBlind: 20, startingStackBb: 100,
+  autoFillAi: false, aiDifficulty: 'normal', ...overrides,
+});
+
+function emitRoom(client: ClientSocket, event: 'room:sit-out' | 'room:sit-in', roomId: string): Promise<Ack> {
+  return new Promise((resolve) => client.emit(event, { roomId }, resolve));
+}
+
+describe('暂离与时间银行', () => {
+  it('暂离的玩家下一手不发牌，回到牌局后恢复', async () => {
+    const baseUrl = await startTestServer('sit-out');
+    const hostCookie = await guest(baseUrl, '暂离房主');
+    const playerCookie = await guest(baseUrl, '暂离玩家');
+    const created = await request<{ room: { id: string } }>(baseUrl, hostCookie, '/api/rooms', casualRoom());
+    await request(baseUrl, playerCookie, `/api/rooms/${created.room.id}/join`, {});
+    const host = await connect(baseUrl, hostCookie);
+    const player = await connect(baseUrl, playerCookie);
+    await emitAck(host, 'room:subscribe', { roomId: created.room.id } as never);
+    await emitAck(player, 'room:subscribe', { roomId: created.room.id } as never);
+    await emitAck(player, 'room:take-seat', { roomId: created.room.id, seat: 1 } as never);
+    await emitAck(host, 'room:add-bot', { roomId: created.room.id, difficulty: 'easy' } as never);
+    expect(await emitRoom(player, 'room:sit-out', created.room.id)).toEqual({ ok: true });
+
+    const dealt = new Promise<GameSnapshot>((resolve) => {
+      player.on('room:snapshot', (snapshot) => {
+        if (snapshot.handId) resolve(snapshot);
+      });
+    });
+    expect((await emitAck(host, 'room:start', { roomId: created.room.id } as never)).ok).toBe(true);
+    const snapshot = await dealt;
+    const self = snapshot.players.find((seat) => seat.id === snapshot.selfId)!;
+    expect(self).toMatchObject({ sittingOut: true, holeCards: [] });
+    expect(snapshot.players.filter((seat) => seat.holeCards.length === 2)).toHaveLength(2);
+
+    const resumed = new Promise<GameSnapshot>((resolve) => {
+      player.on('room:snapshot', (next) => {
+        if (!next.players.find((seat) => seat.id === next.selfId)?.sittingOut) resolve(next);
+      });
+    });
+    expect(await emitRoom(player, 'room:sit-in', created.room.id)).toEqual({ ok: true });
+    expect((await resumed).players.find((seat) => seat.name === '暂离玩家')?.sittingOut).toBe(false);
+  });
+
+  it('锦标赛不能暂离', async () => {
+    const baseUrl = await startTestServer('sit-out-tournament');
+    const hostCookie = await guest(baseUrl, '锦标赛暂离房主');
+    const created = await request<{ room: { id: string } }>(baseUrl, hostCookie, '/api/rooms', casualRoom({ mode: 'tournament' }));
+    const host = await connect(baseUrl, hostCookie);
+    await emitAck(host, 'room:subscribe', { roomId: created.room.id } as never);
+    const result = await emitRoom(host, 'room:sit-out', created.room.id);
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/锦标赛不能暂离/) });
+  });
+
+  it('基础时限用完后进入时间银行，连续超时会自动暂离', async () => {
+    const baseUrl = await startTestServer('time-bank', { turnTimeoutMs: 200, timeBankMs: 300 });
+    const hostCookie = await guest(baseUrl, '时间银行房主');
+    const playerCookie = await guest(baseUrl, '时间银行玩家');
+    const created = await request<{ room: { id: string } }>(baseUrl, hostCookie, '/api/rooms', casualRoom({ maxSeats: 2 }));
+    await request(baseUrl, playerCookie, `/api/rooms/${created.room.id}/join`, {});
+    const host = await connect(baseUrl, hostCookie);
+    const player = await connect(baseUrl, playerCookie);
+    await emitAck(host, 'room:subscribe', { roomId: created.room.id } as never);
+    await emitAck(player, 'room:subscribe', { roomId: created.room.id } as never);
+    await emitAck(player, 'room:take-seat', { roomId: created.room.id, seat: 1 } as never);
+
+    // 大盲位的玩家始终不操作；小盲位只跟注/过牌，让大盲在同一手里连续超时两次。
+    let idleId: string | null = null;
+    let sawTimeBank = false;
+    let baseDeadline = 0;
+    const autoSatOut = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('未触发自动暂离')), 6_000);
+      const onSnapshot = (client: ClientSocket) => (snapshot: GameSnapshot) => {
+        if (!snapshot.handId) return;
+        idleId ??= snapshot.players.find((seat) => seat.isBigBlind)?.id ?? null;
+        const idle = snapshot.players.find((seat) => seat.id === idleId);
+        if (idle?.isActing && !idle.usingTimeBank && !sawTimeBank) baseDeadline = snapshot.actionDeadline ?? 0;
+        if (idle?.isActing && idle.usingTimeBank) {
+          sawTimeBank = true;
+          expect(snapshot.actionDeadline ?? 0).toBeGreaterThan(baseDeadline);
+        }
+        if (idle?.sittingOut) {
+          clearTimeout(timer);
+          resolve();
+          return;
+        }
+        if (snapshot.selfId === idleId || !snapshot.legalActions) return;
+        client.emit('game:action', {
+          roomId: created.room.id,
+          action: {
+            type: snapshot.legalActions.callAmount > 0 ? 'call' : 'check',
+            actionId: `bank-${crypto.randomUUID()}`,
+            handId: snapshot.handId,
+            version: snapshot.version,
+          },
+        }, () => undefined);
+      };
+      host.on('room:snapshot', onSnapshot(host));
+      player.on('room:snapshot', onSnapshot(player));
+    });
+    expect((await emitAck(host, 'room:start', { roomId: created.room.id } as never)).ok).toBe(true);
+    await autoSatOut;
+    expect(sawTimeBank).toBe(true);
+  }, 10_000);
+});
+
+describe('牌桌表情', () => {
+  it('入座玩家的表情会广播给房间，限频生效，观众不能发送', async () => {
+    const baseUrl = await startTestServer('emote');
+    const hostCookie = await guest(baseUrl, '表情房主');
+    const watcherCookie = await guest(baseUrl, '表情观众');
+    const created = await request<{ room: { id: string } }>(baseUrl, hostCookie, '/api/rooms', casualRoom());
+    await request(baseUrl, watcherCookie, `/api/rooms/${created.room.id}/join`, {});
+    const host = await connect(baseUrl, hostCookie);
+    const watcher = await connect(baseUrl, watcherCookie);
+    await emitAck(host, 'room:subscribe', { roomId: created.room.id } as never);
+    await emitAck(watcher, 'room:subscribe', { roomId: created.room.id } as never);
+    const sendEmote = (client: ClientSocket) => new Promise<Ack>((resolve) => client.emit('room:emote', { roomId: created.room.id, emote: 'thumbs_up' }, resolve));
+
+    const received = new Promise<{ playerId: string; emote: string }>((resolve) => watcher.once('room:emote', resolve));
+    expect(await sendEmote(host)).toEqual({ ok: true });
+    expect(await received).toMatchObject({ emote: 'thumbs_up', playerId: expect.stringMatching(/^g:/) });
+    expect(await sendEmote(host)).toMatchObject({ ok: false, error: expect.stringMatching(/太快/) });
+    expect(await sendEmote(watcher)).toMatchObject({ ok: false, error: expect.stringMatching(/入座/) });
   });
 });

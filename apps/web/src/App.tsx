@@ -10,6 +10,7 @@ import { LeaderboardPage } from './pages/LeaderboardPage';
 import { LobbyPage } from './pages/LobbyPage';
 import { RoomPage } from './pages/RoomPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { StatsPage } from './pages/StatsPage';
 
 function Protected() {
   const { user, loading } = useAuth();
@@ -36,6 +37,7 @@ export function App() {
           <Route path="/lobby" element={<LobbyPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/stats" element={<StatsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route element={<AdminOnly />}>

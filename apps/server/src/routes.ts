@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { aiDifficultySchema, buyInBbSchema, roomConfigSchema, type AuthUser } from '@poker/contracts';
+import { aiDifficultySchema, buyInBbSchema, roomConfigSchema, statsModeSchema, type AuthUser, type PlayerProfileView } from '@poker/contracts';
 import sharp from 'sharp';
 import { z } from 'zod';
 import type { AdminService } from './admin.js';
 import type { BankrollService } from './bankroll.js';
-import { isPresetAvatar, PRESET_AVATARS, presetAvatarSvg } from './avatar.js';
+import { avatarUrl, isPresetAvatar, PRESET_AVATARS, presetAvatarSvg } from './avatar.js';
 import type { AuthService, SessionRecord } from './auth.js';
 import { config } from './config.js';
 import type { PersistenceService } from './persistence.js';
@@ -184,6 +184,18 @@ export function registerRoutes(
     }
   });
 
+  app.get('/api/account/transactions', async (request, reply) => {
+    const session = requireReady(auth, request, reply);
+    if (!session) return;
+    if (!session.userId) return reply.code(403).send({ error: '游客没有筹码账户' });
+    const query = z.object({
+      limit: z.coerce.number().int().min(1).max(100).default(30),
+      cursor: z.string().max(120).optional(),
+    }).safeParse(request.query);
+    if (!query.success) return reply.code(400).send({ error: '查询参数无效' });
+    return bankroll.listTransactions(session.userId, query.data);
+  });
+
   app.patch('/api/account/profile', async (request, reply) => {
     const session = requireReady(auth, request, reply);
     if (!session) return;
@@ -307,6 +319,32 @@ export function registerRoutes(
     const hand = persistence.handDetail(session.identityId, params.data.handId);
     if (!hand) return reply.code(404).send({ error: '牌谱不存在或无权查看' });
     return { hand };
+  });
+
+  app.get('/api/stats/me', async (request, reply) => {
+    const session = requireReady(auth, request, reply);
+    if (!session) return;
+    const query = z.object({ mode: statsModeSchema.default('all') }).safeParse(request.query);
+    if (!query.success) return reply.code(400).send({ error: '统计模式无效' });
+    return { stats: persistence.playerStats(session.identityId, query.data.mode) };
+  });
+
+  app.get('/api/stats/users/:userId', async (request, reply) => {
+    const session = requireReady(auth, request, reply);
+    if (!session) return;
+    const params = z.object({ userId: z.string().uuid() }).safeParse(request.params);
+    const query = z.object({ mode: statsModeSchema.default('all') }).safeParse(request.query);
+    if (!params.success || !query.success) return reply.code(400).send({ error: '查询参数无效' });
+    const user = auth.getUser(params.data.userId);
+    if (!user) return reply.code(404).send({ error: '玩家不存在' });
+    // 只返回聚合数据，不包含任何底牌或单手记录。
+    const profile: PlayerProfileView = {
+      userId: user.id,
+      displayName: user.displayName,
+      avatarUrl: avatarUrl(user.avatarType, user.avatarValue),
+      stats: persistence.playerStats(`u:${user.id}`, query.data.mode),
+    };
+    return { profile };
   });
 
   app.get('/api/meta', async () => ({

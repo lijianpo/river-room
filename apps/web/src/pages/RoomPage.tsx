@@ -1,12 +1,14 @@
-import type { Ack, AiDifficulty, PlayerActionType, PlayerSnapshot } from '@poker/contracts';
-import { Armchair, Bot, ChevronLeft, Eye, LogOut, MessageCircle, Play, QrCode, RotateCcw, UserMinus, UserPlus } from 'lucide-react';
+import type { Ack, AiDifficulty, EmoteId, PlayerActionType, PlayerSnapshot, TableEmote } from '@poker/contracts';
+import { Armchair, Bot, ChevronLeft, Coffee, Eye, LogOut, MessageCircle, Play, QrCode, RotateCcw, UserMinus, UserPlus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ActionPanel } from '../components/ActionPanel';
 import { BuyInDialog } from '../components/BuyInDialog';
 import { ChatPanel } from '../components/ChatPanel';
 import { useConfirm } from '../components/ConfirmDialog';
+import { EmotePicker } from '../components/EmotePicker';
 import { HandLog } from '../components/HandLog';
+import { PlayerProfileDialog } from '../components/PlayerProfileDialog';
 import { PokerTable } from '../components/PokerTable';
 import { RoomShareDialog } from '../components/RoomShareDialog';
 import { LatencyBadge } from '../components/LatencyBadge';
@@ -17,6 +19,7 @@ import { socket } from '../lib/socket';
 import { createActionId } from '../lib/action-id';
 import { resolvePreAction, type PreAction } from '../lib/betting';
 import { shouldIncrementChatUnread } from '../lib/chat-unread';
+import { EMOTE_DISPLAY_MS } from '../lib/emotes';
 import { useGameStore } from '../store/game';
 
 function useCountdown(deadline: number | null): number {
@@ -41,6 +44,9 @@ export function RoomPage() {
   const [pendingAction, setPendingAction] = useState<PlayerActionType | null>(null);
   const [buyInRequest, setBuyInRequest] = useState<{ type: 'seat'; seat: number } | { type: 'rebuy' } | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [emotes, setEmotes] = useState<Record<string, TableEmote>>({});
+  const [muted, setMuted] = useState<ReadonlySet<string>>(() => new Set());
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
   // 预选操作只对选择时所在的这一条街有效，换街或换手后自动失效。
   const [preAction, setPreAction] = useState<{ type: PreAction; street: string } | null>(null);
   const [confirmElement, confirm] = useConfirm();
@@ -81,7 +87,22 @@ export function RoomPage() {
       if (shouldIncrementChatUnread({ message, selfId: selfIdRef.current, chatOpen: chatOpenRef.current, mobile: window.matchMedia('(max-width: 980px)').matches })) setUnreadCount((count) => count + 1);
     };
     socket.on('room:chat-history', onChatHistory);
+    const emoteTimers = new Set<number>();
+    const onEmote = (emote: TableEmote) => {
+      setEmotes((current) => ({ ...current, [emote.playerId]: emote }));
+      const timer = window.setTimeout(() => {
+        emoteTimers.delete(timer);
+        // 只清掉这一条；期间同一玩家又发了新表情时保留新的。
+        setEmotes((current) => {
+          if (current[emote.playerId]?.id !== emote.id) return current;
+          const { [emote.playerId]: _expired, ...rest } = current;
+          return rest;
+        });
+      }, EMOTE_DISPLAY_MS);
+      emoteTimers.add(timer);
+    };
     socket.on('room:chat', onChat);
+    socket.on('room:emote', onEmote);
     socket.on('app:error', onError);
     if (socket.connected) subscribe();
     else socket.connect();
@@ -92,7 +113,10 @@ export function RoomPage() {
       socket.off('room:snapshot', setSnapshot);
       socket.off('room:chat-history', onChatHistory);
       socket.off('room:chat', onChat);
+      socket.off('room:emote', onEmote);
       socket.off('app:error', onError);
+      for (const timer of emoteTimers) window.clearTimeout(timer);
+      setEmotes({});
       if (actionTimeout.current !== null) window.clearTimeout(actionTimeout.current);
       actionTimeout.current = null;
       setPendingAction(null);
@@ -187,6 +211,7 @@ export function RoomPage() {
     if (snapshot?.room.mode === 'tournament' && snapshot.room.status === 'playing' && !await confirm({ title: '离座观战', message: '锦标赛开赛后离座将立即弃赛，确定继续吗？', confirmLabel: '弃赛并离座', danger: true })) return;
     socket.emit('room:stand-up', { roomId }, reportError);
   };
+  const toggleSitOut = (sittingOut: boolean) => socket.emit(sittingOut ? 'room:sit-in' : 'room:sit-out', { roomId }, reportError);
   const managePlayer = async (player: PlayerSnapshot) => {
     const event = player.isBot ? 'room:remove-bot' : 'room:kick';
     if (!player.isBot && !await confirm({ title: '移出玩家', message: `确定将 ${player.name} 移出房间吗？`, confirmLabel: '移出', danger: true })) return;
@@ -194,6 +219,8 @@ export function RoomPage() {
     else socket.emit(event, { roomId, playerId: player.id }, reportError);
   };
   const sendChat = (text: string) => socket.emit('chat:send', { roomId, text }, reportError);
+  const sendEmote = (emote: EmoteId) => socket.emit('room:emote', { roomId, emote }, reportError);
+  const mute = (senderId: string) => setMuted((current) => new Set([...current, senderId]));
   const openChat = () => { chatOpenRef.current = true; setUnreadCount(0); setChatOpen(true); };
   const closeChat = () => { chatOpenRef.current = false; setChatOpen(false); };
   const reportChat = (messageId: string) => socket.emit('chat:report', { roomId, messageId }, (ack) => {
@@ -204,6 +231,7 @@ export function RoomPage() {
   if (!snapshot) return <div className="room-loading"><span className="chip-loader">♠</span><h2>{notice?.kind === 'error' ? notice.message : '正在连接牌桌…'}</h2><p>{connected ? '同步房间状态' : '建立实时连接'}</p><button className="secondary-button" onClick={() => navigate('/lobby')}><ChevronLeft /> 返回大厅</button></div>;
   const isHost = snapshot.room.hostId === snapshot.selfId;
   const self = snapshot.players.find((player) => player.id === snapshot.selfId);
+  const visibleEmotes = Object.fromEntries(Object.entries(emotes).filter(([playerId]) => !muted.has(playerId)));
   const canAddBot = isHost && !snapshot.room.ranked && snapshot.players.length < snapshot.room.maxSeats && (snapshot.phase === 'waiting' || snapshot.phase === 'countdown' || snapshot.phase === 'complete' || snapshot.phase === 'showdown');
 
   return (
@@ -214,6 +242,7 @@ export function RoomPage() {
           {snapshot.room.inviteCode && <button className="invite-code" aria-label={`分享房间，房间码 ${snapshot.room.inviteCode}`} onClick={() => setShareOpen(true)}><span>分享房间</span><strong>{snapshot.room.inviteCode}</strong><QrCode size={15} /></button>}
           <WalletSummary wallet={snapshot.selfWallet} compact />
           <LatencyBadge connected={connected} />
+          {self && snapshot.room.mode === 'cash' && snapshot.room.status !== 'finished' && <button className="stand-button sit-out-button" aria-pressed={self.sittingOut} title={self.sittingOut ? '回到牌局' : '暂离：保留座位，下一手起不参与发牌'} onClick={() => toggleSitOut(self.sittingOut)}>{self.sittingOut ? <><Armchair /> 回到牌局</> : <><Coffee /> 暂离</>}</button>}
           {snapshot.selfRole === 'player' && <button className="stand-button" onClick={() => void standUp()}><UserMinus /> 离座观战</button>}
           <button className="leave-button" onClick={leave}><LogOut /> 离开房间</button>
         </div>
@@ -223,8 +252,9 @@ export function RoomPage() {
         <main className="table-column">
           {snapshot.selfRole === 'spectator' && <div className="spectator-banner"><Eye /><span>正在观战 · {snapshot.spectatorCount} 名观众</span>{snapshot.openSeats.length > 0 && (snapshot.room.mode === 'cash' || snapshot.phase === 'waiting' || snapshot.phase === 'countdown') && <strong><Armchair /> 点击空座即可入座</strong>}</div>}
           {snapshot.room.ranked && snapshot.room.mode === 'cash' && snapshot.selfWallet && <div className="table-wallet-hud"><WalletSummary wallet={snapshot.selfWallet} />{self && <div className="buyin-remaining"><small>本次买入 {self.buyInChips?.toLocaleString() ?? '—'}</small><strong>当前剩余 {self.stack.toLocaleString()}</strong>{self.committed > 0 && <span>本手已下注 {self.committed.toLocaleString()}</span>}</div>}</div>}
-          <PokerTable snapshot={snapshot} onManagePlayer={(player) => void managePlayer(player)} onTakeSeat={takeSeat}>
+          <PokerTable snapshot={snapshot} onManagePlayer={(player) => void managePlayer(player)} onTakeSeat={takeSeat} emotes={visibleEmotes} onShowProfile={(player) => player.userId && setProfileUserId(player.userId)}>
             {snapshot.handId && <HandLog events={snapshot.events} handNumber={snapshot.handNumber} />}
+            {self && <EmotePicker onEmote={sendEmote} onPhrase={sendChat} />}
           </PokerTable>
           {(snapshot.phase === 'waiting' || snapshot.phase === 'countdown') ? (
             <section className="waiting-panel">
@@ -236,16 +266,20 @@ export function RoomPage() {
               </div>
             </section>
           ) : snapshot.room.status === 'finished' ? null : snapshot.selfRole === 'player' ? (
+            <>
+            {self?.sittingOut && <div className="sit-out-banner" role="status"><Coffee /><span>你已暂离，下一手起不参与发牌，座位会为你保留 10 分钟</span><button className="primary-button" onClick={() => toggleSitOut(true)}><Armchair /> 回到牌局</button></div>}
             <ActionPanel snapshot={snapshot} onAction={action} pendingAction={pendingAction} preAction={activePreAction} onPreActionChange={(type) => setPreAction(type ? { type, street } : null)} />
+            </>
           ) : <section className="spectator-action"><Eye /><div><strong>观战模式</strong><p>你可以查看公共牌和行动；空座玩家会从下一手开始参与。</p></div></section>}
           {snapshot.room.mode === 'cash' && self?.stack === 0 && snapshot.handId && (snapshot.phase === 'complete' || snapshot.phase === 'showdown') && <button className="rebuy-button" onClick={() => snapshot.room.ranked ? setBuyInRequest({ type: 'rebuy' }) : socket.emit('room:rebuy', { roomId }, reportError)}><RotateCcw /> {snapshot.room.ranked ? '重新买入' : `补充至 ${snapshot.room.bigBlind * snapshot.room.config.startingStackBb} 筹码`}</button>}
           {snapshot.room.status === 'finished' && <section className="finished-panel"><strong>{snapshot.resultMessage}</strong><button className="primary-button" onClick={leave}>返回大厅</button></section>}
         </main>
-        <ChatPanel messages={messages} selfId={snapshot.selfId} open={chatOpen} onClose={closeChat} onSend={sendChat} onReport={reportChat} readOnly={snapshot.selfRole === 'spectator' && (snapshot.room.ranked || snapshot.room.mode === 'tournament')} />
+        <ChatPanel messages={messages} selfId={snapshot.selfId} open={chatOpen} onClose={closeChat} onSend={sendChat} onReport={reportChat} muted={muted} onMute={mute} readOnly={snapshot.selfRole === 'spectator' && (snapshot.room.ranked || snapshot.room.mode === 'tournament')} />
       </div>
       <button className="mobile-chat-button" onClick={openChat}><MessageCircle />{unreadCount > 0 && <span>{unreadCount > 99 ? '99+' : unreadCount}</span>}</button>
       {buyInRequest && snapshot.selfWallet && snapshot.room.minBuyInBb !== null && snapshot.room.maxBuyInBb !== null && <BuyInDialog title={buyInRequest.type === 'seat' ? '选择入座买入' : '重新买入'} minBb={snapshot.room.minBuyInBb} maxBb={snapshot.room.maxBuyInBb} bigBlind={snapshot.room.bigBlind} wallet={snapshot.selfWallet} onClose={() => setBuyInRequest(null)} onConfirm={confirmBuyIn} />}
       {snapshot.room.inviteCode && <RoomShareDialog open={shareOpen} roomName={snapshot.room.name} inviteCode={snapshot.room.inviteCode} onClose={() => setShareOpen(false)} onNotice={notify} />}
+      {profileUserId && <PlayerProfileDialog userId={profileUserId} onClose={() => setProfileUserId(null)} />}
       {confirmElement}
     </div>
   );

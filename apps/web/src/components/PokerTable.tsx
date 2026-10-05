@@ -1,29 +1,12 @@
-import type { GameSnapshot, PlayerSnapshot } from '@poker/contracts';
+import type { GameSnapshot, PlayerSnapshot, TableEmote } from '@poker/contracts';
 import { Bot, Coins, Crown, WifiOff, X } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { emoteOf } from '../lib/emotes';
+import { betPlacement, seatPosition } from '../lib/table-layout';
 import { useTurnClock } from '../lib/turn-clock';
 import { PlayingCard } from './PlayingCard';
 import { Avatar } from './Avatar';
 import { ShowdownOverlay } from './ShowdownOverlay';
-
-const layouts: Record<number, Array<[number, number]>> = {
-  2: [[50, 88], [50, 8]],
-  3: [[50, 88], [12, 25], [88, 25]],
-  4: [[50, 88], [8, 45], [50, 8], [92, 45]],
-  5: [[50, 88], [8, 58], [26, 8], [74, 8], [92, 58]],
-  6: [[50, 88], [12, 70], [14, 14], [50, 7], [86, 14], [88, 70]],
-  7: [[50, 88], [15, 76], [6, 42], [28, 8], [72, 8], [94, 42], [85, 76]],
-  8: [[50, 88], [20, 80], [6, 54], [15, 16], [50, 7], [85, 16], [94, 54], [80, 80]],
-  9: [[50, 88], [20, 80], [6, 58], [9, 25], [30, 8], [70, 8], [91, 25], [94, 58], [80, 80]],
-};
-
-type BetPlacement = 'below' | 'left' | 'right';
-
-/** 下注筹码摆放：上半桌放在座位下方，下半桌放在朝向桌心的一侧，避免压住公共牌。 */
-function betPlacement([x, y]: [number, number]): BetPlacement {
-  if (y < 65) return 'below';
-  return x <= 50 ? 'right' : 'left';
-}
 
 function SeatView({
   player,
@@ -33,7 +16,9 @@ function SeatView({
   isHost,
   canManage,
   showBet,
+  emote,
   onRemove,
+  onShowProfile,
 }: {
   player: PlayerSnapshot;
   isSelf: boolean;
@@ -42,19 +27,25 @@ function SeatView({
   isHost: boolean;
   canManage: boolean;
   showBet: boolean;
+  emote?: TableEmote | undefined;
   onRemove: (player: PlayerSnapshot) => void;
+  onShowProfile?: ((player: PlayerSnapshot) => void) | undefined;
 }) {
   const clock = useTurnClock(player.isActing ? deadline : null);
   return (
     <div
-      className={`table-seat ${isSelf ? 'self' : ''} ${player.isActing ? 'acting' : ''} ${player.folded ? 'folded' : ''}`}
+      className={`table-seat ${isSelf ? 'self' : ''} ${player.isActing ? 'acting' : ''} ${player.folded ? 'folded' : ''} ${player.sittingOut ? 'sitting-out' : ''}`}
       style={{ left: `${position[0]}%`, top: `${position[1]}%` }}
     >
       <div className={`seat-cards ${isSelf ? 'self-hole-cards' : ''}`} aria-label={isSelf ? '自己的底牌' : undefined}>
         {player.holeCards.map((card, index) => <PlayingCard key={`${index}-${card.rank}${card.suit}`} card={card} small={!isSelf} />)}
       </div>
       <div className="seat-panel">
-        <span className="avatar">{player.isBot ? <Bot size={16} /> : <Avatar src={player.avatarUrl} name={player.name} />}</span>
+        <span className="avatar">
+          {player.isBot ? <Bot size={16} /> : onShowProfile && !isSelf && player.userId ? (
+            <button className="seat-avatar-button" aria-label={`查看 ${player.name} 的资料`} onClick={() => onShowProfile(player)}><Avatar src={player.avatarUrl} name={player.name} /></button>
+          ) : <Avatar src={player.avatarUrl} name={player.name} />}
+        </span>
         <span className="seat-info">
           <strong>{player.name}</strong>
           <small className={isSelf && player.buyInChips !== null ? 'self-stack' : ''}>{isSelf && player.buyInChips !== null && <span>剩余 </span>}<b>{player.stack.toLocaleString()}</b></small>
@@ -74,8 +65,10 @@ function SeatView({
         {player.allIn && <span className="danger">ALL IN</span>}
         {player.placement && <span>#{player.placement}</span>}
         {player.leavingAfterHand && <span>离座中</span>}
+        {player.sittingOut && !player.leavingAfterHand && <span>暂离</span>}
       </div>
-      {player.isActing && <div className={`turn-timer ${clock.remaining <= 5_000 ? 'urgent' : ''}`} style={{ '--turn-progress': `${clock.progress * 100}%` } as React.CSSProperties} aria-label={`剩余 ${Math.ceil(clock.remaining / 1000)} 秒`}>{Math.ceil(clock.remaining / 1000)}</div>}
+      {player.isActing && <div className={`turn-timer ${player.usingTimeBank ? 'time-bank' : clock.remaining <= 5_000 ? 'urgent' : ''}`} title={player.usingTimeBank ? '正在使用时间银行' : undefined} style={{ '--turn-progress': `${clock.progress * 100}%` } as React.CSSProperties} aria-label={`剩余 ${Math.ceil(clock.remaining / 1000)} 秒`}>{Math.ceil(clock.remaining / 1000)}</div>}
+      {emote && <span key={emote.id} className="seat-emote" role="img" aria-label={`${player.name}：${emoteOf(emote.emote).label}`}>{emoteOf(emote.emote).emoji}</span>}
       {showBet && player.committed > 0 && <span className={`seat-bet ${betPlacement(position)}`} title="本手已下注"><Coins size={12} aria-hidden="true" />{player.committed.toLocaleString()}</span>}
     </div>
   );
@@ -85,18 +78,23 @@ export function PokerTable({
   snapshot,
   onManagePlayer,
   onTakeSeat,
+  emotes,
+  onShowProfile,
   children,
 }: {
   snapshot: GameSnapshot;
   onManagePlayer: (player: PlayerSnapshot) => void;
   onTakeSeat: (seat: number) => void;
+  /** 各玩家最近一次表情，按玩家 id 索引 */
+  emotes?: Record<string, TableEmote>;
+  /** 点击注册玩家头像时打开资料卡 */
+  onShowProfile?: (player: PlayerSnapshot) => void;
   /** 追加在牌桌左下角信息行末尾的内容（如本手记录） */
   children?: ReactNode;
 }) {
   const self = snapshot.players.find((player) => player.id === snapshot.selfId);
   const maxSeats = snapshot.room.maxSeats;
-  const positions = layouts[maxSeats] ?? layouts[9]!;
-  const positionOf = (seatNumber: number) => positions[self ? (seatNumber - self.seat + maxSeats) % maxSeats : seatNumber] ?? positions[0]!;
+  const positionOf = (seatNumber: number) => seatPosition(seatNumber, maxSeats, self?.seat ?? null);
   const handSettled = snapshot.phase === 'complete' || snapshot.phase === 'showdown';
   const showdown = snapshot.showdown && snapshot.showdown.displayUntil > Date.now() ? snapshot.showdown : null;
   return (
@@ -133,7 +131,9 @@ export function PokerTable({
             isHost={player.id === snapshot.room.hostId}
             canManage={canManage}
             showBet={!handSettled}
+            emote={emotes?.[player.id]}
             onRemove={onManagePlayer}
+            onShowProfile={onShowProfile}
           />
         );
       })}

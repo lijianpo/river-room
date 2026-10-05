@@ -61,4 +61,31 @@ describe('用户筹码账务', () => {
     expect(() => bankroll.adjust(userId, -20_000, userId, '超额扣减')).toThrow(/不能为负数/);
     sqlite.close();
   });
+
+  it('筹码流水按时间倒序分页，同一时刻的记录不会因游标被跳过', () => {
+    const { db, sqlite, bankroll, userId } = setup();
+    for (let index = 0; index < 4; index += 1) bankroll.adjust(userId, 100 + index, userId, `调整 ${index}`);
+    // 让两条记录落在同一毫秒，验证复合游标。
+    const rows = db.select().from(chipTransactions).where(eq(chipTransactions.userId, userId)).all();
+    const sameTime = rows.find((row) => row.type === 'initial')!.createdAt + 10;
+    for (const row of rows.filter((item) => item.note === '调整 1' || item.note === '调整 2')) {
+      db.update(chipTransactions).set({ createdAt: sameTime }).where(eq(chipTransactions.id, row.id)).run();
+    }
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const page = bankroll.listTransactions(userId, { limit: 2, cursor });
+      seen.push(...page.transactions.map((item) => item.id));
+      for (let index = 1; index < page.transactions.length; index += 1) {
+        expect(page.transactions[index - 1]!.createdAt).toBeGreaterThanOrEqual(page.transactions[index]!.createdAt);
+      }
+      cursor = page.nextCursor ?? undefined;
+      pages += 1;
+    } while (cursor && pages < 10);
+    expect(seen).toHaveLength(5);
+    expect(new Set(seen).size).toBe(5);
+    expect(bankroll.listTransactions(userId, { limit: 50 }).transactions).toContainEqual(expect.objectContaining({ type: 'initial', amount: 10_000 }));
+    sqlite.close();
+  });
 });

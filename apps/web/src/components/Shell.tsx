@@ -1,5 +1,5 @@
 import type { Ack } from '@poker/contracts';
-import { History, LogOut, Settings, Shield, Spade, Trophy } from 'lucide-react';
+import { BarChart3, History, LogOut, Settings, Shield, Spade, Trophy } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -13,6 +13,7 @@ const links = [
   { to: '/lobby', label: '牌局大厅', icon: Spade },
   { to: '/leaderboard', label: '排行榜', icon: Trophy },
   { to: '/history', label: '牌谱', icon: History },
+  { to: '/stats', label: '数据', icon: BarChart3 },
   { to: '/settings', label: '设置', icon: Settings },
 ];
 

@@ -3,6 +3,7 @@ import { Camera, Crown, Gift, KeyRound, Save, ShieldAlert, ShieldCheck, UserRoun
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthPanel } from '../components/AuthPanel';
+import { ChipLedger } from '../components/ChipLedger';
 import { Avatar } from '../components/Avatar';
 import { WalletSummary } from '../components/WalletSummary';
 import { useAuth } from '../context/AuthContext';
@@ -105,6 +106,7 @@ export function AccountPage() {
           <dl><div><dt>身份</dt><dd><Crown size={15} /> 注册玩家</dd></div><div><dt>排位资格</dt><dd>已解锁</dd></div></dl>
         </section>
       </div>
+      {wallet && <ChipLedger availableChips={wallet.availableChips} />}
     </div>
   );
 }

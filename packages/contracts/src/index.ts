@@ -19,11 +19,15 @@ export const playerActionTypeSchema = z.enum([
   'all_in',
 ]);
 
+/** 牌桌表情，客户端负责映射到具体的 emoji。 */
+export const emoteIdSchema = z.enum(['thumbs_up', 'laugh', 'wow', 'cry', 'angry', 'think', 'fire', 'gg']);
+
 export type GameMode = z.infer<typeof gameModeSchema>;
 export type RoomVisibility = z.infer<typeof roomVisibilitySchema>;
 export type AiDifficulty = z.infer<typeof aiDifficultySchema>;
 export type RoomStatus = z.infer<typeof roomStatusSchema>;
 export type PlayerActionType = z.infer<typeof playerActionTypeSchema>;
+export type EmoteId = z.infer<typeof emoteIdSchema>;
 export type AccountStatus = 'active' | 'disabled';
 export type RoomRole = 'player' | 'spectator';
 
@@ -79,6 +83,24 @@ export interface WalletView {
   totalChips: number;
   dailyBonusAmount: number;
   dailyBonusAvailable: boolean;
+}
+
+export type ChipTransactionType = 'initial' | 'daily_bonus' | 'buy_in' | 'cash_out' | 'recovery' | 'admin_adjustment';
+
+export interface ChipTransactionView {
+  id: string;
+  type: ChipTransactionType;
+  /** 正数为入账，负数为出账 */
+  amount: number;
+  balanceAfter: number;
+  note: string | null;
+  createdAt: number;
+}
+
+export interface ChipTransactionPage {
+  transactions: ChipTransactionView[];
+  /** 下一页游标；为 null 表示没有更多记录 */
+  nextCursor: string | null;
 }
 
 export const playerActionSchema = z.object({
@@ -171,6 +193,12 @@ export interface PlayerSnapshot {
   avatarUrl: string;
   leavingAfterHand: boolean;
   buyInChips: number | null;
+  /** 暂离中：保留座位但不参与发牌 */
+  sittingOut: boolean;
+  /** 剩余时间银行（毫秒） */
+  timeBankMs: number;
+  /** 当前行动是否已进入时间银行 */
+  usingTimeBank: boolean;
 }
 
 export interface ShowdownWinnerView {
@@ -302,22 +330,68 @@ export interface HandHistorySummary {
 
 export interface HandHistoryDetail extends HandHistorySummary {
   board: CardView[];
+  smallBlind: number;
+  /** 该手牌所在牌桌的座位数，用于回放时还原座位布局 */
+  maxSeats: number;
   players: Array<{
     id: string;
     name: string;
     seat: number;
     holeCards: CardView[];
     shown: boolean;
+    startingStack: number;
     netChips: number;
   }>;
   actions: Array<{
     sequence: number;
+    playerId: string;
     playerName: string;
     street: string;
     action: string;
     amount: number;
     createdAt: number;
   }>;
+}
+
+export interface TableEmote {
+  id: string;
+  playerId: string;
+  emote: EmoteId;
+  at: number;
+}
+
+export const statsModeSchema = z.enum(['all', 'cash', 'tournament']);
+export type StatsMode = z.infer<typeof statsModeSchema>;
+
+/** 玩家技术统计；比率均为 0–1 的小数，样本不足以计算时为 null。 */
+export interface PlayerStatsView {
+  hands: number;
+  /** 翻牌前主动入池率 */
+  vpip: number | null;
+  /** 翻牌前加注率 */
+  pfr: number | null;
+  /** 翻牌后激进度：（下注 + 加注）÷ 跟注 */
+  aggressionFactor: number | null;
+  /** 看到翻牌后进入摊牌的比例 */
+  wtsd: number | null;
+  /** 摊牌获胜率 */
+  wsd: number | null;
+  /** 净赢手数占比 */
+  winRate: number | null;
+  netChips: number;
+  netBb: number;
+  /** 常规桌每百手净赢大盲 */
+  bbPer100: number | null;
+  biggestPotWon: number;
+  /** 最近若干手的累计净赢（BB），从 0 开始，按时间先后排列 */
+  netCurve: number[];
+}
+
+export interface PlayerProfileView {
+  userId: string;
+  displayName: string;
+  avatarUrl: string;
+  stats: PlayerStatsView;
 }
 
 export interface ClientToServerEvents {
@@ -330,9 +404,12 @@ export interface ClientToServerEvents {
   'room:add-bot': (payload: { roomId: string; difficulty: AiDifficulty }, callback?: (result: Ack) => void) => void;
   'room:remove-bot': (payload: { roomId: string; playerId: string }, callback?: (result: Ack) => void) => void;
   'room:kick': (payload: { roomId: string; playerId: string }, callback?: (result: Ack) => void) => void;
+  'room:sit-out': (payload: { roomId: string }, callback?: (result: Ack) => void) => void;
+  'room:sit-in': (payload: { roomId: string }, callback?: (result: Ack) => void) => void;
   'room:rebuy': (payload: { roomId: string; buyInBb?: number }, callback?: (result: Ack) => void) => void;
   'game:action': (payload: { roomId: string; action: PlayerAction }, callback?: (result: Ack) => void) => void;
   'chat:send': (payload: { roomId: string; text: string }, callback?: (result: Ack) => void) => void;
+  'room:emote': (payload: { roomId: string; emote: EmoteId }, callback?: (result: Ack) => void) => void;
   'chat:report': (payload: { roomId: string; messageId: string }, callback?: (result: Ack) => void) => void;
   'connection:ping': (payload: { nonce: string }, callback?: (result: PingAck) => void) => void;
 }
@@ -341,6 +418,7 @@ export interface ServerToClientEvents {
   'room:snapshot': (snapshot: GameSnapshot) => void;
   'room:chat': (message: ChatMessage) => void;
   'room:chat-history': (messages: ChatMessage[]) => void;
+  'room:emote': (emote: TableEmote) => void;
   'lobby:updated': () => void;
   'app:error': (payload: { message: string; code?: string }) => void;
   'wallet:updated': (wallet: WalletView) => void;

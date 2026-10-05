@@ -101,7 +101,10 @@ export function ActionPanel({
     );
   }
 
-  const urgent = clock.remaining > 0 && clock.remaining <= URGENT_MS;
+  const usingTimeBank = Boolean(self?.usingTimeBank);
+  const urgent = !usingTimeBank && clock.remaining > 0 && clock.remaining <= URGENT_MS;
+  const seconds = Math.ceil(clock.remaining / 1000);
+  const timeBankSeconds = Math.floor((self?.timeBankMs ?? 0) / 1000);
   const onAmountKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -110,9 +113,12 @@ export function ActionPanel({
   };
 
   return (
-    <div className={`action-panel my-turn ${urgent ? 'urgent' : ''}`} aria-busy={busy} style={{ '--turn-progress': clock.progress } as React.CSSProperties}>
+    <div className={`action-panel my-turn ${urgent ? 'urgent' : ''} ${usingTimeBank ? 'time-bank' : ''}`} aria-busy={busy} style={{ '--turn-progress': clock.progress } as React.CSSProperties}>
       <span className="turn-bar" aria-hidden="true" />
-      <span className="turn-pill" role="status">轮到你行动{snapshot.actionDeadline ? ` · ${Math.ceil(clock.remaining / 1000)} 秒` : ''}</span>
+      <span className="turn-pill" role="status">
+        {usingTimeBank ? `时间银行 · ${seconds} 秒` : `轮到你行动${snapshot.actionDeadline ? ` · ${seconds} 秒` : ''}`}
+        {!usingTimeBank && timeBankSeconds > 0 && <small className="time-bank-left" title="基础时限用完后自动启用">⏱ 备用 {timeBankSeconds} 秒</small>}
+      </span>
       {canSize && (
         <div className="bet-sizing">
           <div className="preset-row" aria-label="快捷下注额">

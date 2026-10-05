@@ -6,6 +6,7 @@
 @import './styles/pages.css';
 @import './styles/table.css';
 @import './styles/account.css';
+@import './styles/stats.css';
 @import './styles/admin.css';
 
 /* 避免 iOS Safari 聚焦小字号表单控件时自动放大页面；需放在最后以覆盖各模块的输入框字号。 */

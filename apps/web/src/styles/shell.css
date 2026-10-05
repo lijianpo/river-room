@@ -42,7 +42,7 @@
 @media (max-width: 900px) {
   .topbar { padding-inline: 18px; }
   .desktop-nav { display: none; }
-  .mobile-nav { position: fixed; z-index: 50; left: 0; right: 0; bottom: 0; height: calc(61px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); display: grid; grid-template-columns: repeat(4,1fr); border-top: 1px solid var(--line); background: rgba(5,11,9,.95); backdrop-filter: blur(16px); }
+  .mobile-nav { position: fixed; z-index: 50; left: 0; right: 0; bottom: 0; height: calc(61px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border-top: 1px solid var(--line); background: rgba(5,11,9,.95); backdrop-filter: blur(16px); }
   .mobile-nav a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--muted); font-size: var(--fs-min); }
   .mobile-nav a.active { color: var(--gold); }
   .page-content { width: min(100% - 30px,760px); padding-top: 30px; padding-bottom: 90px; }
@@ -55,7 +55,6 @@
   .page-heading h1 { font-size: 2.25rem; }
   .topbar > .latency-badge { margin-left: auto; }
   .account-chip { margin-left: 7px; }
-  .mobile-nav { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; }
   .topbar > .wallet-chip { margin-left: auto; padding-inline: 8px; }
   .topbar > .latency-badge { margin-left: 0; }
   .topbar > .wallet-chip span { display: none; }

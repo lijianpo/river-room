@@ -5,6 +5,7 @@ import type {
   AuthUser,
   ChatMessage,
   ClientToServerEvents,
+  EmoteId,
   GameEventView,
   GameSnapshot,
   PlayerAction,
@@ -51,6 +52,10 @@ interface LiveSeat {
   forfeited: boolean;
   buyInChips: number | null;
   stakeId: string | null;
+  sittingOut: boolean;
+  sitOutSince: number | null;
+  consecutiveTimeouts: number;
+  timeBankMs: number;
 }
 
 interface LiveMember {
@@ -87,11 +92,30 @@ interface LiveRoom {
   processedActionIds: Set<string>;
   chat: ChatMessage[];
   chatRate: Map<string, number[]>;
+  /** 每位玩家上次发送表情的时间，用于限频 */
+  emoteRate: Map<string, number>;
   createdAt: number;
   resultMessage: string | null;
   showdown: ShowdownResultView | null;
   tournamentEntries: Map<string, { userId: string | null; placement: number | null }>;
+  /** 正在使用时间银行的座位及开始时间 */
+  timeBank: { identityId: string; startedAt: number } | null;
 }
+
+export interface RoomTiming {
+  turnTimeoutMs: number;
+  /** 每位真人的初始时间银行，0 表示关闭 */
+  timeBankMs: number;
+}
+
+/** 每手结束后为真人回补的时间银行 */
+const TIME_BANK_REFILL_MS = 2_000;
+/** 时间银行上限 */
+const TIME_BANK_MAX_MS = 60_000;
+/** 连续超时多少次后自动暂离 */
+const AUTO_SIT_OUT_TIMEOUTS = 2;
+/** 暂离超过该时长后自动离座 */
+const SIT_OUT_LIMIT_MS = 10 * 60_000;
 
 const TOURNAMENT_BLINDS = [
   [10, 20],
@@ -119,6 +143,9 @@ const ACTION_NAMES: Record<string, string> = {
   win: '赢得底池',
 };
 
+/** 同一玩家两次表情之间的最短间隔 */
+const EMOTE_COOLDOWN_MS = 3_000;
+
 const BAD_WORDS = ['傻逼', '操你', 'fuck', 'shit'];
 
 function inviteCode(): string {
@@ -136,13 +163,17 @@ export class RoomManager {
   private readonly rooms = new Map<string, LiveRoom>();
   private readonly identityRooms = new Map<string, string>();
   private readonly persistedHands = new Set<string>();
+  private readonly timing: RoomTiming;
 
   constructor(
     private readonly io: PokerIo,
     private readonly persistence: PersistenceService,
     private readonly bankroll: BankrollService,
     private readonly showdownDurationSeconds: () => number = () => 8,
-  ) {}
+    timing: Partial<RoomTiming> = {},
+  ) {
+    this.timing = { turnTimeoutMs: config.turnTimeoutMs, timeBankMs: config.timeBankMs, ...timing };
+  }
 
   listPublicRooms(): PublicRoomSummary[] {
     return [...this.rooms.values()]
@@ -207,10 +238,12 @@ export class RoomManager {
       processedActionIds: new Set(),
       chat: [],
       chatRate: new Map(),
+      emoteRate: new Map(),
       createdAt: Date.now(),
       resultMessage: null,
       showdown: null,
       tournamentEntries: new Map(),
+      timeBank: null,
     };
     this.rooms.set(id, room);
     try {
@@ -406,6 +439,30 @@ export class RoomManager {
     this.lobbyChanged();
   }
 
+  sitOut(auth: AuthUser, roomId: string): void {
+    const room = this.requireRoom(roomId);
+    const seat = room.seats.get(auth.identityId);
+    if (!seat) throw new Error('你还没有入座');
+    if (room.config.mode !== 'cash') throw new Error('锦标赛不能暂离');
+    if (seat.sittingOut) return;
+    this.markSittingOut(room, seat);
+    this.addSystemMessage(room, `${seat.name} 暂时离开，将从下一手开始不参与发牌`);
+    this.broadcast(room);
+  }
+
+  sitIn(auth: AuthUser, roomId: string): void {
+    const room = this.requireRoom(roomId);
+    const seat = room.seats.get(auth.identityId);
+    if (!seat) throw new Error('你还没有入座');
+    if (!seat.sittingOut) return;
+    seat.sittingOut = false;
+    seat.sitOutSince = null;
+    seat.consecutiveTimeouts = 0;
+    this.addSystemMessage(room, `${seat.name} 回到了牌局`);
+    this.broadcast(room);
+    this.maybeResumeCash(room);
+  }
+
   start(auth: AuthUser, roomId: string): void {
     const room = this.requireHost(auth, roomId);
     if (room.status !== 'waiting') throw new Error('当前不能开始牌局');
@@ -528,6 +585,7 @@ export class RoomManager {
     room.processedActionIds.add(action.actionId);
     if (room.processedActionIds.size > 200) room.processedActionIds.clear();
     engine.applyAction(auth.identityId, { type: action.type, ...(action.amount === undefined ? {} : { amount: action.amount }) });
+    seat.consecutiveTimeouts = 0;
     this.scheduleTurn(room);
   }
 
@@ -558,6 +616,15 @@ export class RoomManager {
     if (room.chat.length > 50) room.chat.shift();
     this.io.to(this.channel(room.id)).emit('room:chat', message);
     return message;
+  }
+
+  sendEmote(auth: AuthUser, roomId: string, emote: EmoteId): void {
+    const room = this.requireRoom(roomId);
+    if (!room.seats.has(auth.identityId)) throw new Error('入座后才能发送表情');
+    const now = Date.now();
+    if (now - (room.emoteRate.get(auth.identityId) ?? 0) < EMOTE_COOLDOWN_MS) throw new Error('表情发送太快，请稍后再试');
+    room.emoteRate.set(auth.identityId, now);
+    this.io.to(this.channel(room.id)).emit('room:emote', { id: randomUUID(), playerId: auth.identityId, emote, at: now });
   }
 
   reportChat(auth: AuthUser, roomId: string, messageId: string): void {
@@ -612,8 +679,17 @@ export class RoomManager {
     room.transitionTimer = null;
     room.showdown = null;
     room.resultMessage = null;
+    const now = Date.now();
+    for (const seat of [...room.seats.values()]) {
+      if (seat.sittingOut && seat.sitOutSince !== null && now - seat.sitOutSince >= SIT_OUT_LIMIT_MS) {
+        this.removeSeat(room, seat.identityId, true);
+        this.addSystemMessage(room, `${seat.name} 暂离时间过长，已自动离座`);
+        this.lobbyChanged();
+      }
+    }
+    if (!this.rooms.has(room.id)) return;
     const activeSeats = [...room.seats.values()]
-      .filter((seat) => seat.stack > 0 && !seat.leavingAfterHand)
+      .filter((seat) => seat.stack > 0 && !seat.leavingAfterHand && !seat.sittingOut)
       .filter((seat) => room.config.mode === 'tournament' || seat.isBot || seat.connected)
       .sort((left, right) => left.seat - right.seat);
     if (activeSeats.length < 2 || !activeSeats.some((seat) => !seat.isBot)) {
@@ -648,6 +724,7 @@ export class RoomManager {
     if (room.actionTimer) clearTimeout(room.actionTimer);
     room.actionTimer = null;
     room.actionDeadline = null;
+    this.settleTimeBank(room);
     const engine = room.engine;
     if (!engine) return;
     this.syncStacksFromEngine(room, engine);
@@ -662,7 +739,12 @@ export class RoomManager {
       this.scheduleTurn(room);
       return;
     }
-    const delay = acting.isBot ? 600 + Math.floor(Math.random() * 900) : config.turnTimeoutMs;
+    const delay = acting.isBot ? 600 + Math.floor(Math.random() * 900) : this.timing.turnTimeoutMs;
+    this.armActionTimer(room, acting, delay);
+    this.broadcast(room);
+  }
+
+  private armActionTimer(room: LiveRoom, acting: LiveSeat, delay: number): void {
     room.actionDeadline = Date.now() + delay;
     room.actionTimer = setTimeout(() => {
       try {
@@ -674,7 +756,19 @@ export class RoomManager {
         } else {
           const legal = current.getLegalActions(acting.identityId);
           if (!legal) return;
+          // 基础时限用完后，在线玩家自动进入时间银行，而不是直接托管。
+          if (!room.timeBank && acting.connected && acting.timeBankMs > 0) {
+            room.timeBank = { identityId: acting.identityId, startedAt: Date.now() };
+            this.armActionTimer(room, acting, acting.timeBankMs);
+            this.broadcast(room);
+            return;
+          }
           current.applyAction(acting.identityId, { type: legal.canCheck ? 'check' : 'fold' });
+          acting.consecutiveTimeouts += 1;
+          if (room.config.mode === 'cash' && !acting.sittingOut && acting.consecutiveTimeouts >= AUTO_SIT_OUT_TIMEOUTS) {
+            this.markSittingOut(room, acting);
+            this.addSystemMessage(room, `${acting.name} 连续超时，已自动暂离`);
+          }
         }
         this.scheduleTurn(room);
       } catch (error) {
@@ -683,7 +777,19 @@ export class RoomManager {
         });
       }
     }, delay);
-    this.broadcast(room);
+  }
+
+  /** 行动结束（主动或超时）后，从对应座位扣除已用的时间银行。 */
+  private settleTimeBank(room: LiveRoom): void {
+    if (!room.timeBank) return;
+    const seat = room.seats.get(room.timeBank.identityId);
+    if (seat) seat.timeBankMs = Math.max(0, seat.timeBankMs - (Date.now() - room.timeBank.startedAt));
+    room.timeBank = null;
+  }
+
+  private markSittingOut(room: LiveRoom, seat: LiveSeat): void {
+    seat.sittingOut = true;
+    seat.sitOutSince = Date.now();
   }
 
   private completeHand(room: LiveRoom): void {
@@ -700,6 +806,11 @@ export class RoomManager {
       }
     }
     room.actionDeadline = null;
+    if (this.timing.timeBankMs > 0) {
+      for (const seat of room.seats.values()) {
+        if (!seat.isBot) seat.timeBankMs = Math.min(TIME_BANK_MAX_MS, seat.timeBankMs + TIME_BANK_REFILL_MS);
+      }
+    }
     room.resultMessage = engine.result.resultText;
     const completedAt = Date.now();
     const durationSeconds = Math.min(30, Math.max(3, this.showdownDurationSeconds()));
@@ -906,7 +1017,7 @@ export class RoomManager {
     if (room.config.mode !== 'cash' || room.status !== 'playing') return;
     if (room.transitionTimer || (room.engine && !room.engine.isComplete)) return;
     const eligible = [...room.seats.values()].filter(
-      (seat) => seat.stack > 0 && !seat.leavingAfterHand && (seat.isBot || seat.connected),
+      (seat) => seat.stack > 0 && !seat.leavingAfterHand && !seat.sittingOut && (seat.isBot || seat.connected),
     );
     if (eligible.length >= 2 && eligible.some((seat) => !seat.isBot)) room.transitionTimer = setTimeout(() => this.startHand(room), 700);
   }
@@ -959,6 +1070,10 @@ export class RoomManager {
       forfeited: false,
       buyInChips: stake ? buyInChips : null,
       stakeId: stake?.id ?? null,
+      sittingOut: false,
+      sitOutSince: null,
+      consecutiveTimeouts: 0,
+      timeBankMs: this.timing.timeBankMs,
     });
     if (auth.userId && stake) this.notifyWallet(auth.userId);
   }
@@ -985,6 +1100,10 @@ export class RoomManager {
       forfeited: false,
       buyInChips: null,
       stakeId: null,
+      sittingOut: false,
+      sitOutSince: null,
+      consecutiveTimeouts: 0,
+      timeBankMs: 0,
     };
     room.seats.set(identityId, seat);
     return seat;
@@ -1186,6 +1305,9 @@ export class RoomManager {
           avatarUrl: seat.avatarUrl,
           leavingAfterHand: seat.leavingAfterHand,
           buyInChips: seat.buyInChips,
+          sittingOut: seat.sittingOut,
+          timeBankMs: seat.timeBankMs,
+          usingTimeBank: room.timeBank?.identityId === seat.identityId,
         };
       });
     const occupiedSeats = new Set([...room.seats.values()].map((seat) => seat.seat));

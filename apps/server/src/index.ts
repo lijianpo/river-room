@@ -16,7 +16,7 @@ import { config } from './config.js';
 import { createDatabase } from './db/index.js';
 import { PersistenceService } from './persistence.js';
 import { PresenceService } from './presence.js';
-import { RoomManager, type PokerIo } from './room-manager.js';
+import { RoomManager, type PokerIo, type RoomTiming } from './room-manager.js';
 import { registerRoutes } from './routes.js';
 import { registerSocketHandlers } from './socket.js';
 
@@ -53,7 +53,9 @@ function isAllowedOrigin(origin: string | undefined, request: FastifyRequest): b
   );
 }
 
-export async function buildServer(options: { databasePath?: string; avatarDirectory?: string; logger?: boolean } = {}): Promise<BuiltServer> {
+export async function buildServer(
+  options: { databasePath?: string; avatarDirectory?: string; logger?: boolean; timing?: Partial<RoomTiming> } = {},
+): Promise<BuiltServer> {
   const app = Fastify({ logger: options.logger ?? true, trustProxy: true });
   const avatarDirectory = options.avatarDirectory ?? config.avatarDirectory;
   const { db, sqlite } = createDatabase(options.databasePath);
@@ -93,7 +95,7 @@ export async function buildServer(options: { databasePath?: string; avatarDirect
   }) as PokerIo;
   const presence = new PresenceService();
   const admin = new AdminService(db, auth, presence, bankroll);
-  const rooms = new RoomManager(io, persistence, bankroll, () => admin.getSettings().showdownDurationSeconds);
+  const rooms = new RoomManager(io, persistence, bankroll, () => admin.getSettings().showdownDurationSeconds, options.timing);
   const disconnectUser = (userId: string) => {
     for (const socketId of presence.socketIdsForUser(userId)) io.sockets.sockets.get(socketId)?.disconnect(true);
   };
